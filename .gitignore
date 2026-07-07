@@ -1,0 +1,12 @@
+# Archivos compilados de Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Tu binario ejecutable (si llegas a usar 'go build')
+main
+
+# Carpetas de sistema operativo
+.DS_Store
