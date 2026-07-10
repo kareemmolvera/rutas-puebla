@@ -14,6 +14,23 @@ import (
 
 var db *sql.DB
 
+// Lo que el iPhone le va a mandar a Go
+type SolicitudBusqueda struct {
+	LatOrigen  float64 `json:"lat_origen"`
+	LngOrigen  float64 `json:"lng_origen"`
+	LatDestino float64 `json:"lat_destino"`
+	LngDestino float64 `json:"lng_destino"`
+}
+
+// Lo que Go le va a responder al iPhone para que pinte en la pantalla
+type RespuestaBusqueda struct {
+	RutaID         int    `json:"ruta_id"`
+	NombreRuta     string `json:"nombre_ruta"`
+	Camino         string `json:"camino"` // El GeoJSON o texto con los puntos de la calle
+	ParadaCercanaA string `json:"parada_origen_nombre"`
+	ParadaCercanaB string `json:"parada_destino_nombre"`
+}
+
 type Ruta struct {
 	ID          int             `json:"id"`
 	Nombre      string          `json:"nombre"`
@@ -243,8 +260,74 @@ func main() {
 	http.HandleFunc("/api/paradas", habilitarCORS(paradasHandler))
 	http.HandleFunc("/api/paradas/cercana", habilitarCORS(paradaCercanaHandler))
 
+	// PARA BUSCAR LA RUTA //
+	http.HandleFunc("/api/buscar-ruta", HandlerBuscarRuta)
+
 	fmt.Println("Servidor corriendo en http://localhost:8080")
 	if err = http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
+	// Permitir que el iPhone se conecte desde la red local (CORS)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var sol SolicitudBusqueda
+	err := json.NewDecoder(r.Body).Decode(&sol)
+	if err != nil {
+		http.Error(w, "Datos inválidos", http.StatusBadRequest)
+		return
+	}
+
+	// LA QUERY MAGNA: Busca la ruta que tenga una parada cerca del origen Y otra parada cerca del destino
+	// Usamos la fórmula de Haversine simplificada en SQL (6371 es el radio de la Tierra en km)
+	query := `
+		SELECT 
+			r.id, 
+			r.nombre, 
+			r.camino,
+			p1.nombre as parada_origen,
+			p2.nombre as parada_destino
+		FROM rutas r
+		JOIN paradas p1 ON r.id = p1.ruta_id
+		JOIN paradas p2 ON r.id = p2.ruta_id
+		WHERE 
+			(6371 * acos(cos(radians($1)) * cos(radians(p1.lat)) * cos(radians(p1.lng) - radians($2)) + sin(radians($1)) * sin(radians(p1.lat)))) < 1.0
+			AND 
+			(6371 * acos(cos(radians($3)) * cos(radians(p2.lat)) * cos(radians(p2.lng) - radians($4)) + sin(radians($3)) * sin(radians(p2.lat)))) < 1.0
+		LIMIT 1;
+	`
+
+	var resp RespuestaBusqueda
+	// db es tu variable global de conexión a la base de datos
+	err = db.QueryRow(query, sol.LatOrigen, sol.LngOrigen, sol.LatDestino, sol.LngDestino).Scan(
+		&resp.RutaID,
+		&resp.NombreRuta,
+		&resp.Camino,
+		&resp.ParadaCercanaA,
+		&resp.ParadaCercanaB,
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		// Si no encuentra ninguna coincidencia a menos de 1km
+		json.NewEncoder(w).Encode(map[string]string{"mensaje": "No se encontraron rutas directas para este trayecto."})
+		return
+	}
+
+	// Si todo sale bien, le regresamos la ruta completa
+	json.NewEncoder(w).Encode(resp)
 }

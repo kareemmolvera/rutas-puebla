@@ -104,22 +104,55 @@ function conmutarModoParada() {
 }
 
 // --- EVENTOS DEL MAPA (CLICS) ---
-mapa.on("click", function (evento) {
+// Usamos 'async' porque ahora nos comunicaremos con un servidor externo en tiempo real
+mapa.on("click", async function (evento) {
+  if (!esModoTrazado && !esModoParada) return;
+
   const lat = evento.latlng.lat;
   const lng = evento.latlng.lng;
 
   // Si está trazando una ruta...
   if (esModoTrazado) {
-    coordenadasTemporales.push([lat, lng]);
-
-    if (lineaTemporalVisual === null) {
+    if (coordenadasTemporales.length === 0) {
+      // Es el primer clic: solo guardamos el punto inicial y preparamos la línea
+      coordenadasTemporales.push([lat, lng]);
       lineaTemporalVisual = L.polyline(coordenadasTemporales, {
         color: "#ff5722",
         weight: 4,
         dashArray: "5, 10",
       }).addTo(mapa);
     } else {
-      lineaTemporalVisual.setLatLngs(coordenadasTemporales);
+      // Siguientes clics: Usamos OSRM para unir el clic anterior con el nuevo siguiendo la calle
+      const ultimoPunto =
+        coordenadasTemporales[coordenadasTemporales.length - 1];
+
+      // OSRM requiere las coordenadas invertidas: longitud,latitud
+      const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${ultimoPunto[1]},${ultimoPunto[0]};${lng},${lat}?geometries=geojson&overview=full`;
+
+      try {
+        const respuesta = await fetch(urlOSRM);
+        const data = await respuesta.json();
+
+        if (data.routes && data.routes.length > 0) {
+          // OSRM nos devuelve toda la curva de la calle. La acomodamos a formato Leaflet [lat, lng]
+          const coordenadasCalle = data.routes[0].geometry.coordinates.map(
+            (coord) => [coord[1], coord[0]],
+          );
+
+          // Quitamos el primer punto para no duplicarlo y metemos el resto al arreglo
+          coordenadasCalle.shift();
+          coordenadasTemporales.push(...coordenadasCalle);
+
+          // Refrescamos el dibujo
+          lineaTemporalVisual.setLatLngs(coordenadasTemporales);
+        } else {
+          // Si OSRM no encuentra calle (ej. terracería), dibuja línea recta normal
+          coordenadasTemporales.push([lat, lng]);
+          lineaTemporalVisual.setLatLngs(coordenadasTemporales);
+        }
+      } catch (error) {
+        console.error("Error al conectar con OSRM:", error);
+      }
     }
   }
   // Si está colocando una parada...
