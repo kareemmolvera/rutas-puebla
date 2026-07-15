@@ -10,3 +10,4 @@ main
 
 # Carpetas de sistema operativo
 .DS_Store
+.commandcode

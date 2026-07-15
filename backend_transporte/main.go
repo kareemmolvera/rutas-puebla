@@ -14,7 +14,7 @@ import (
 
 var db *sql.DB
 
-// Lo que el iPhone le va a mandar a Go
+// Lo que el usuario  le va a mandar a Go
 type SolicitudBusqueda struct {
 	LatOrigen  float64 `json:"lat_origen"`
 	LngOrigen  float64 `json:"lng_origen"`
@@ -22,7 +22,7 @@ type SolicitudBusqueda struct {
 	LngDestino float64 `json:"lng_destino"`
 }
 
-// Lo que Go le va a responder al iPhone para que pinte en la pantalla
+// Lo que Go le va a responder al celular  para que pinte en la pantalla
 type RespuestaBusqueda struct {
 	RutaID         int    `json:"ruta_id"`
 	NombreRuta     string `json:"nombre_ruta"`
@@ -52,6 +52,7 @@ type RespuestaParada struct {
 	DistanciaMetros float64 `json:"distancia_metros"`
 }
 
+// Inicializacion de la base de datos
 func inicializarTablas() error {
 	queryRutas := `
 	CREATE TABLE IF NOT EXISTS rutas (
@@ -102,20 +103,42 @@ func haversine(lat1, lon1, lat2, lon2 float64) float64 {
 }
 
 // --- HANDLERS ---
+
 func rutasHandler(w http.ResponseWriter, r *http.Request) {
-	// (Mismo código de rutas que ya tenías)
 	switch r.Method {
 	case http.MethodPost:
 		var nuevaRuta Ruta
-		json.NewDecoder(r.Body).Decode(&nuevaRuta)
+		// 1. Validamos que el JSON que manda app.js se decodifique bien
+		if err := json.NewDecoder(r.Body).Decode(&nuevaRuta); err != nil {
+			http.Error(w, "Datos inválidos", http.StatusBadRequest)
+			return
+		}
+
 		var id int
-		db.QueryRow(`INSERT INTO rutas (nombre, tipo, coordenadas) VALUES ($1, $2, $3) RETURNING id;`, nuevaRuta.Nombre, nuevaRuta.Tipo, nuevaRuta.Coordenadas).Scan(&id)
+		// 2. Convertimos el RawMessage a string() para que Postgres lo acepte como JSONB
+		err := db.QueryRow(
+			`INSERT INTO rutas (nombre, tipo, coordenadas) VALUES ($1, $2, $3) RETURNING id;`,
+			nuevaRuta.Nombre, nuevaRuta.Tipo, string(nuevaRuta.Coordenadas),
+		).Scan(&id)
+		// 3. Atrapamos cualquier error de SQL para que el servidor no se apague
+		if err != nil {
+			http.Error(w, "Error al guardar en BD: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, `{"mensaje": "Ruta guardada", "id": %d}`, id)
+
 	case http.MethodGet:
-		rows, _ := db.Query(`SELECT id, nombre, tipo, coordenadas FROM rutas;`)
+		// 4. Validamos que la consulta GET no devuelva error antes de cerrarla
+		rows, err := db.Query(`SELECT id, nombre, tipo, coordenadas FROM rutas;`)
+		if err != nil {
+			http.Error(w, "Error consultando la BD", http.StatusInternalServerError)
+			return
+		}
 		defer rows.Close()
+
 		listaRutas := []Ruta{}
 		for rows.Next() {
 			var ru Ruta
@@ -128,19 +151,36 @@ func rutasHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func paradasHandler(w http.ResponseWriter, r *http.Request) {
-	// (Mismo código de paradas que ya tenías)
 	switch r.Method {
 	case http.MethodPost:
 		var p Parada
-		json.NewDecoder(r.Body).Decode(&p)
+		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+			http.Error(w, "Datos inválidos", http.StatusBadRequest)
+			return
+		}
+
 		var id int
-		db.QueryRow(`INSERT INTO paradas (ruta_id, nombre, latitud, longitud) VALUES ($1, $2, $3, $4) RETURNING id;`, p.RutaID, p.Nombre, p.Latitud, p.Longitud).Scan(&id)
+		err := db.QueryRow(
+			`INSERT INTO paradas (ruta_id, nombre, latitud, longitud) VALUES ($1, $2, $3, $4) RETURNING id;`,
+			p.RutaID, p.Nombre, p.Latitud, p.Longitud,
+		).Scan(&id)
+		if err != nil {
+			http.Error(w, "Error al guardar en BD: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, `{"mensaje": "Parada guardada", "id": %d}`, id)
+
 	case http.MethodGet:
-		rows, _ := db.Query(`SELECT id, ruta_id, nombre, latitud, longitud FROM paradas;`)
+		rows, err := db.Query(`SELECT id, ruta_id, nombre, latitud, longitud FROM paradas;`)
+		if err != nil {
+			http.Error(w, "Error consultando la BD", http.StatusInternalServerError)
+			return
+		}
 		defer rows.Close()
+
 		lista := []Parada{}
 		for rows.Next() {
 			var p Parada
@@ -269,8 +309,25 @@ func main() {
 	}
 }
 
+// Función auxiliar para encontrar qué punto del trazo está más cerca de la parada
+func buscarIndiceMasCercano(camino [][]float64, latParada, lngParada float64) int {
+	mejorIndice := 0
+	distanciaMinima := math.MaxFloat64
+
+	for i, punto := range camino {
+		if len(punto) >= 2 {
+			// punto[0] es latitud, punto[1] es longitud
+			dist := haversine(latParada, lngParada, punto[0], punto[1])
+			if dist < distanciaMinima {
+				distanciaMinima = dist
+				mejorIndice = i
+			}
+		}
+	}
+	return mejorIndice
+}
+
 func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
-	// Permitir que el iPhone se conecte desde la red local (CORS)
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -292,42 +349,67 @@ func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// LA QUERY MAGNA: Busca la ruta que tenga una parada cerca del origen Y otra parada cerca del destino
-	// Usamos la fórmula de Haversine simplificada en SQL (6371 es el radio de la Tierra en km)
+	// QUERY CORREGIDA: Ahora ORDENA por la distancia más corta (ASC) antes de hacer el LIMIT 1
 	query := `
 		SELECT 
 			r.id, 
 			r.nombre, 
-			r.camino,
+			r.coordenadas as camino,
 			p1.nombre as parada_origen,
-			p2.nombre as parada_destino
+			p2.nombre as parada_destino,
+			p1.latitud, p1.longitud,
+			p2.latitud, p2.longitud
 		FROM rutas r
 		JOIN paradas p1 ON r.id = p1.ruta_id
 		JOIN paradas p2 ON r.id = p2.ruta_id
 		WHERE 
-			(6371 * acos(cos(radians($1)) * cos(radians(p1.lat)) * cos(radians(p1.lng) - radians($2)) + sin(radians($1)) * sin(radians(p1.lat)))) < 1.0
+			(6371 * acos(cos(radians($1)) * cos(radians(p1.latitud)) * cos(radians(p1.longitud) - radians($2)) + sin(radians($1)) * sin(radians(p1.latitud)))) < 1.0
 			AND 
-			(6371 * acos(cos(radians($3)) * cos(radians(p2.lat)) * cos(radians(p2.lng) - radians($4)) + sin(radians($3)) * sin(radians(p2.lat)))) < 1.0
+			(6371 * acos(cos(radians($3)) * cos(radians(p2.latitud)) * cos(radians(p2.longitud) - radians($4)) + sin(radians($3)) * sin(radians(p2.latitud)))) < 1.0
+		ORDER BY (
+			(6371 * acos(cos(radians($1)) * cos(radians(p1.latitud)) * cos(radians(p1.longitud) - radians($2)) + sin(radians($1)) * sin(radians(p1.latitud)))) +
+			(6371 * acos(cos(radians($3)) * cos(radians(p2.latitud)) * cos(radians(p2.longitud) - radians($4)) + sin(radians($3)) * sin(radians(p2.latitud))))
+		) ASC
 		LIMIT 1;
 	`
 
 	var resp RespuestaBusqueda
-	// db es tu variable global de conexión a la base de datos
+	var latOrigen, lngOrigen, latDestino, lngDestino float64
+
 	err = db.QueryRow(query, sol.LatOrigen, sol.LngOrigen, sol.LatDestino, sol.LngDestino).Scan(
 		&resp.RutaID,
 		&resp.NombreRuta,
 		&resp.Camino,
 		&resp.ParadaCercanaA,
 		&resp.ParadaCercanaB,
+		&latOrigen, &lngOrigen,
+		&latDestino, &lngDestino,
 	)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
-		// Si no encuentra ninguna coincidencia a menos de 1km
 		json.NewEncoder(w).Encode(map[string]string{"mensaje": "No se encontraron rutas directas para este trayecto."})
 		return
 	}
 
-	// Si todo sale bien, le regresamos la ruta completa
+	// --- LÓGICA BLINDADA DE RECORTE ---
+	var caminoCompleto [][]float64
+	json.Unmarshal([]byte(resp.Camino), &caminoCompleto)
+
+	// Solo intentamos recortar si el camino tiene coordenadas válidas
+	if len(caminoCompleto) > 0 {
+		idxInicio := buscarIndiceMasCercano(caminoCompleto, latOrigen, lngOrigen)
+		idxFin := buscarIndiceMasCercano(caminoCompleto, latDestino, lngDestino)
+
+		if idxInicio > idxFin {
+			idxInicio, idxFin = idxFin, idxInicio
+		}
+
+		// Extraemos el pedazo de ruta de forma segura
+		caminoRecortado := caminoCompleto[idxInicio : idxFin+1]
+		caminoBytes, _ := json.Marshal(caminoRecortado)
+		resp.Camino = string(caminoBytes)
+	}
+
 	json.NewEncoder(w).Encode(resp)
 }

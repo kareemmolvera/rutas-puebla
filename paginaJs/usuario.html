@@ -9,6 +9,10 @@
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"
+    />
     <style>
       body {
         margin: 0;
@@ -55,21 +59,59 @@
       #panel-busqueda button:hover {
         background: #218838;
       }
+      /* Tarjeta de indicaciones flotante */
+      #tarjeta-ruta {
+        position: absolute;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background: white;
+        padding: 15px 20px;
+        border-radius: 12px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        width: 85%;
+        max-width: 350px;
+        display: none; /* Oculta por defecto */
+      }
+      #tarjeta-ruta h3 {
+        margin: 0 0 10px 0;
+        color: #ff5722;
+        font-size: 18px;
+      }
+      #tarjeta-ruta p {
+        margin: 5px 0;
+        font-size: 14px;
+        color: #333;
+      }
+      #tarjeta-ruta button {
+        margin-top: 10px;
+        width: 100%;
+        padding: 10px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: bold;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
-    <div id="panel-busqueda">
-      <input
-        type="text"
-        id="destino"
-        placeholder="¿A dónde vas? (Ej. Zócalo)"
-      />
-      <button onclick="buscarDestino()">Ir</button>
+    <div id="tarjeta-ruta">
+      <h3 id="ruta-titulo">Ruta</h3>
+      <p>🟢 <b>Sube en:</b> <span id="ruta-subida"></span></p>
+      <p>🔴 <b>Baja en:</b> <span id="ruta-bajada"></span></p>
+      <button
+        onclick="document.getElementById('tarjeta-ruta').style.display = 'none'"
+      >
+        Entendido
+      </button>
     </div>
-
     <div id="mapa-usuario"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <script src="usuario.js"></script>
   </body>
 </html>

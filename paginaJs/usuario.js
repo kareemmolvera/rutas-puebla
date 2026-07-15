@@ -6,9 +6,65 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap - Proyecto Feria",
 }).addTo(mapa);
 
+// 1. Configurar los límites geográficos para Puebla (Bounding Box)
+const pueblaBounds = L.latLngBounds(
+  [18.9, -98.35], // Suroeste de Puebla
+  [19.15, -98.05], // Noreste de Puebla
+);
+
+// 2. Agregar el buscador inteligente al mapa
+const buscador = L.Control.geocoder({
+  defaultMarkGeocode: false,
+  geocoder: L.Control.Geocoder.nominatim({
+    geocodingQueryParams: {
+      viewbox: "-98.3500,19.1500,-98.0500,18.9000",
+      bounded: 1,
+    },
+  }),
+}).addTo(mapa); // <-- Anclado a tu variable "mapa"
+
+// 3. Qué hacer cuando el usuario elige una sugerencia de la lista
+buscador.on("markgeocode", function (e) {
+  const destinoCoordenadas = e.geocode.center;
+
+  // Si ya existe un marcador anterior, lo borramos
+  if (marcadorDestino !== null) {
+    mapa.removeLayer(marcadorDestino);
+  }
+
+  // Ponemos el marcador visual en el destino elegido
+  marcadorDestino = L.marker(destinoCoordenadas)
+    .addTo(mapa)
+    .bindPopup(e.geocode.name)
+    .openPopup();
+
+  // Extraemos las coordenadas
+  const latDestino = destinoCoordenadas.lat;
+  const lngDestino = destinoCoordenadas.lng;
+
+  console.log("Destino seleccionado:", latDestino, lngDestino);
+
+  // Enviamos los datos directo a Go si ya tenemos el GPS del usuario
+  if (miUbicacionActual) {
+    buscarMejorRutaEnGo(
+      miUbicacionActual.lat,
+      miUbicacionActual.lng,
+      latDestino,
+      lngDestino,
+    );
+  } else {
+    alert("Esperando a obtener tu ubicación GPS actual...");
+  }
+});
+
 let marcadorGPS = null;
 let miUbicacionActual = null; // Guardaremos aquí lat y lng del pasajero
 let marcadorDestino = null; // Definimos como borrar y agregar una nueva direccion
+
+//Borrar marcadores al realizar una segunda busqueda
+let lineaRutaVisual = null;
+let marcadorSubida = null;
+let marcadorBajada = null;
 
 // --- INICIAR RASTREO GPS ---
 // Comprobamos si el navegador tiene soporte para ubicación
@@ -109,13 +165,12 @@ async function buscarDestino() {
     boton.innerText = "Ir"; // Restauramos el botón
   }
 }
-//https://d370023cc41a1f.lhr.life
-//https://f998077f2f63be.lhr.life
+
 async function buscarMejorRutaEnGo(latA, lngA, latB, lngB) {
   try {
     //esta mal de momento :(
     const respuesta = await fetch(
-      "https://e4a6be88a3bc0f.lhr.life/api/buscar-ruta",
+      "https://affected-bagpipe-implosion.ngrok-free.dev/api/buscar-ruta",
       {
         method: "POST",
         headers: {
@@ -136,19 +191,53 @@ async function buscarMejorRutaEnGo(latA, lngA, latB, lngB) {
       // Si Go nos manda un mensaje de error (no hay rutas cerca)
       alert(data.mensaje);
     } else {
-      // ¡Éxito! Go encontró la ruta
-      alert(
-        `¡Toma la ruta: ${data.nombre_ruta}! \nSube en: ${data.parada_origen_nombre} \nBaja en: ${data.parada_destino_nombre}`,
-      );
-
       // Convertimos el string de la base de datos (JSON) a un arreglo de coordenadas real
       const coordenadasCamino = JSON.parse(data.camino);
 
-      // Dibujamos la línea de la ruta en el mapa del usuario
-      L.polyline(coordenadasCamino, {
+      // 1. Limpiar la ruta y paradas de la búsqueda anterior (si existen)
+      if (lineaRutaVisual) mapa.removeLayer(lineaRutaVisual);
+      if (marcadorSubida) mapa.removeLayer(marcadorSubida);
+      if (marcadorBajada) mapa.removeLayer(marcadorBajada);
+
+      // 2. Dibujamos la nueva línea de la ruta
+      lineaRutaVisual = L.polyline(coordenadasCamino, {
         color: "#ff5722",
         weight: 5,
       }).addTo(mapa);
+
+      // 3. Extraemos el primer y último punto del trayecto
+      const puntoOrigen = coordenadasCamino[0];
+      const puntoDestino = coordenadasCamino[coordenadasCamino.length - 1];
+
+      // 4. Usamos circleMarker (Vectores SVG) para garantizar que siempre se vean
+      marcadorSubida = L.circleMarker(puntoOrigen, {
+        color: "white",
+        fillColor: "#28a745", // Verde para subir
+        fillOpacity: 1,
+        radius: 9,
+        weight: 2,
+      })
+        .addTo(mapa)
+        .bindPopup(`<b>🟢 Sube aquí:</b><br>${data.parada_origen_nombre}`);
+
+      marcadorBajada = L.circleMarker(puntoDestino, {
+        color: "white",
+        fillColor: "#dc3545", // Rojo para bajar
+        fillOpacity: 1,
+        radius: 9,
+        weight: 2,
+      })
+        .addTo(mapa)
+        .bindPopup(`<b>🔴 Baja aquí:</b><br>${data.parada_destino_nombre}`);
+
+      // 5. Inyectamos los datos en la tarjeta HTML y la mostramos
+      document.getElementById("ruta-titulo").innerText =
+        `¡Toma la ${data.nombre_ruta}!`;
+      document.getElementById("ruta-subida").innerText =
+        data.parada_origen_nombre;
+      document.getElementById("ruta-bajada").innerText =
+        data.parada_destino_nombre;
+      document.getElementById("tarjeta-ruta").style.display = "block";
     }
   } catch (error) {
     console.error("Error al conectar con Go:", error);
