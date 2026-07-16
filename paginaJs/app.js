@@ -1,3 +1,4 @@
+// app.js
 const coordenadasPuebla = [19.0414, -98.2063];
 const mapa = L.map("mapa").setView(coordenadasPuebla, 14);
 
@@ -6,23 +7,19 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap - Proyecto Feria",
 }).addTo(mapa);
 
-// --- VARIABLES DE CONTROL ---
 let esModoTrazado = false;
 let coordenadasTemporales = [];
 let lineaTemporalVisual = null;
-
-let esModoParada = false; // Variable para controlar el modo de clics de paradas
+let esModoParada = false;
 
 // --- CARGA INICIAL (GET) ---
 function cargarRutasDesdeAPI() {
-  fetch("http://localhost:8080/api/rutas")
-    .then((res) => res.json())
+  apiObtenerRutas()
     .then((rutas) => {
       const selectRutas = document.getElementById("ruta-parada");
-      selectRutas.innerHTML = ""; // Limpiamos el texto de "Cargando..."
+      selectRutas.innerHTML = "";
 
       rutas.forEach((ruta) => {
-        // 1. Dibujamos la línea en el mapa
         let colorRuta = ruta.tipo === "linea" ? "#e6194B" : "#000075";
         const linea = L.polyline(ruta.coordenadas, {
           color: colorRuta,
@@ -31,7 +28,6 @@ function cargarRutasDesdeAPI() {
         }).addTo(mapa);
         linea.bindPopup(`<b>${ruta.nombre}</b> (${ruta.tipo})`);
 
-        // 2. Llenamos el <select> del panel de paradas
         const option = document.createElement("option");
         option.value = ruta.id;
         option.text = ruta.nombre;
@@ -42,15 +38,12 @@ function cargarRutasDesdeAPI() {
 }
 
 function cargarParadasDesdeAPI() {
-  fetch("http://localhost:8080/api/paradas")
-    .then((res) => res.json())
+  apiObtenerParadas()
     .then((paradas) => {
-      // Limpiamos marcadores viejos para evitar duplicados al recargar
       mapa.eachLayer((layer) => {
         if (layer instanceof L.Marker) mapa.removeLayer(layer);
       });
 
-      // Colocamos el icono del marcador de Leaflet para cada parada
       paradas.forEach((p) => {
         L.marker([p.latitud, p.longitud])
           .addTo(mapa)
@@ -62,7 +55,7 @@ function cargarParadasDesdeAPI() {
 
 // --- INTERFAZ (BOTONES) ---
 function conmutarModoTrazado() {
-  if (esModoParada) conmutarModoParada(); // Apaga el modo parada si estaba activo
+  if (esModoParada) conmutarModoParada();
 
   esModoTrazado = !esModoTrazado;
   const btn = document.getElementById("btn-trazar");
@@ -85,7 +78,7 @@ function conmutarModoTrazado() {
 }
 
 function conmutarModoParada() {
-  if (esModoTrazado) conmutarModoTrazado(); // Apaga el modo trazado si estaba activo
+  if (esModoTrazado) conmutarModoTrazado();
 
   esModoParada = !esModoParada;
   const btn = document.getElementById("btn-modo-parada");
@@ -104,33 +97,25 @@ function conmutarModoParada() {
 }
 
 // --- EVENTOS DEL MAPA (CLICS) ---
-// Usamos 'async' porque ahora nos comunicaremos con un servidor externo en tiempo real
-// --- EVENTOS DEL MAPA (CLICS) ---
 mapa.on("click", async function (evento) {
   if (!esModoTrazado && !esModoParada) return;
 
   const lat = evento.latlng.lat;
   const lng = evento.latlng.lng;
 
-  // Si está trazando una ruta...
   if (esModoTrazado) {
-    // 1. Guardamos la coordenada exacta del clic
     coordenadasTemporales.push([lat, lng]);
 
     if (coordenadasTemporales.length === 1) {
-      // 2. Es el primer clic: preparamos la línea visual punteada
       lineaTemporalVisual = L.polyline(coordenadasTemporales, {
         color: "#ff5722",
         weight: 4,
         dashArray: "5, 10",
       }).addTo(mapa);
     } else {
-      // 3. Siguientes clics: Leaflet une los puntos exactamente donde diste clic
       lineaTemporalVisual.setLatLngs(coordenadasTemporales);
     }
-  }
-  // Si está colocando una parada...
-  else if (esModoParada) {
+  } else if (esModoParada) {
     guardarParadaFisica(lat, lng);
   }
 });
@@ -151,15 +136,9 @@ function guardarRuta() {
     coordenadas: coordenadasTemporales,
   };
 
-  fetch("http://localhost:8080/api/rutas", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datosRuta),
-  })
-    .then((res) => res.json())
+  apiGuardarRuta(datosRuta)
     .then((data) => {
       alert("¡Ruta guardada exitosamente en la base de datos!");
-
       limpiarTrazadoActual();
       conmutarModoTrazado();
       document.getElementById("nombre").value = "";
@@ -170,7 +149,7 @@ function guardarRuta() {
       cargarRutasDesdeAPI();
     })
     .catch((err) => {
-      alert("Error al conectar con el backend de Go");
+      alert("Error al conectar con el backend");
       console.error(err);
     });
 }
@@ -195,25 +174,19 @@ function guardarParadaFisica(lat, lng) {
     longitud: lng,
   };
 
-  fetch("http://localhost:8080/api/paradas", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(datosParada),
-  })
-    .then((res) => res.json())
+  apiGuardarParada(datosParada)
     .then((data) => {
       alert(`¡Parada "${nombreInput}" guardada con éxito!`);
-      document.getElementById("nombre-parada").value = ""; // Limpiamos el input
-      conmutarModoParada(); // Apagamos el modo parada
-      cargarParadasDesdeAPI(); // Refrescamos los iconos
+      document.getElementById("nombre-parada").value = "";
+      conmutarModoParada();
+      cargarParadasDesdeAPI();
     })
     .catch((err) => {
-      alert("Error al guardar la parada en Go");
+      alert("Error al guardar la parada");
       console.error(err);
     });
 }
 
-// Limpia el progreso actual de clics sin guardar
 function limpiarTrazadoActual() {
   coordenadasTemporales = [];
   if (lineaTemporalVisual !== null) {
@@ -222,6 +195,5 @@ function limpiarTrazadoActual() {
   }
 }
 
-// Carga inicial al abrir la página
 cargarRutasDesdeAPI();
 cargarParadasDesdeAPI();
