@@ -1,15 +1,14 @@
 package handlers
 
 import (
+	"backend-transporte/bd"
+	"backend-transporte/modelos"
+	"backend-transporte/utils"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"strconv"
-
-	"backend-transporte/bd"
-	"backend-transporte/modelos"
-	"backend-transporte/utils"
 )
 
 func HabilitarCORS(siguiente http.HandlerFunc) http.HandlerFunc {
@@ -25,6 +24,7 @@ func HabilitarCORS(siguiente http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// Funcion para agregar nuevaRuta
 func RutasHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -65,6 +65,7 @@ func RutasHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Funcion para agrgar	nuevaParada
 func ParadasHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -104,6 +105,7 @@ func ParadasHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Funciones Derivadas
 func ParadaCercanaHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
@@ -147,6 +149,7 @@ func ParadaCercanaHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+// Funcion para buscarRuta
 func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -195,7 +198,7 @@ func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"mensaje": "No se encontraron rutas."})
+		json.NewEncoder(w).Encode(map[string]string{"mensaje": "No se encontraron rutas cercanas a tu origen y destino."})
 		return
 	}
 
@@ -205,9 +208,16 @@ func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
 	if len(caminoCompleto) > 0 {
 		idxInicio := utils.BuscarIndiceMasCercano(caminoCompleto, latO, lngO)
 		idxFin := utils.BuscarIndiceMasCercano(caminoCompleto, latD, lngD)
-		if idxInicio > idxFin {
-			idxInicio, idxFin = idxFin, idxInicio
+		
+		// 🛑 LA MAGIA: El filtro de direccionalidad 🛑
+		if idxInicio >= idxFin {
+			// El camión ya pasó por el destino antes de llegar al usuario. Va en sentido contrario.
+			json.NewEncoder(w).Encode(map[string]string{
+				"mensaje": "La ruta detectada va en sentido contrario. Intenta caminar a la parada de enfrente o verifica las rutas de regreso.",
+			})
+			return
 		}
+
 		caminoRecortado := caminoCompleto[idxInicio : idxFin+1]
 		caminoBytes, _ := json.Marshal(caminoRecortado)
 		resp.Camino = string(caminoBytes)

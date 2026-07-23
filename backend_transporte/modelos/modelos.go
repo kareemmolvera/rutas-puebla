@@ -1,5 +1,7 @@
 package modelos
 
+// modelos Para Base de Datos
+
 import "encoding/json"
 
 type SolicitudBusqueda struct {

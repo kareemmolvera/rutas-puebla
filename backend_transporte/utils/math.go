@@ -2,7 +2,7 @@ package utils
 
 import "math"
 
-// Haversine calcula la distancia en metros entre dos coordenadas geográficas
+// Funcion de Haversine calcula la distancia en metros entre dos coordenadas geográficas
 func Haversine(lat1, lon1, lat2, lon2 float64) float64 {
 	const radioTierraKm = 6371.0
 
