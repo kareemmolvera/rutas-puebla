@@ -1,28 +1,28 @@
-// app.js - Versión Azure Maps
+// app.js - Versión Azure Maps con Muchos a Muchos
 
 // 1. INICIALIZAR EL MAPA
-// Nota: Azure Maps usa [Longitud, Latitud] para centrar el mapa
 const mapa = new atlas.Map("mapa", {
-    center: [-98.2063, 19.0414], // Coordenadas de Puebla invertidas para Azure
+    center: [-98.2063, 19.0414], 
     zoom: 14,
     authOptions: {
         authType: 'subscriptionKey',
-        subscriptionKey: '8Q3AVe2gCxB3xk0Ga3U3y1LvqjpTe6Fk9zui4KIfEpv9UWUJvGddJQQJ99CGACYeBjFjleVwAAAgAZMP4FKk' // <-- ¡PON TU CLAVE DE AZURE AQUÍ!
+        subscriptionKey: '8Q3AVe2gCxB3xk0Ga3U3y1LvqjpTe6Fk9zui4KIfEpv9UWUJvGddJQQJ99CGACYeBjFjleVwAAAgAZMP4FKk' 
     }
 });
 
 let esModoTrazado = false;
-let coordenadasTemporales = []; // Seguirá guardando [lat, lng] para mandarlo a la BD en Go
+let coordenadasTemporales = []; 
 let esModoParada = false;
 
-// Variables para manejar los datos y las capas en Azure
+// 🛑 NUEVO: Variable para llevar la cuenta del orden de las paradas
+let ordenActualParada = 0; 
+
 let dataSourceRutas, dataSourceParadas, dataSourceTrazado;
 let popupGlobal;
 
-// 2. CONFIGURAR CAPAS (Esperar a que el mapa cargue)
+// 2. CONFIGURAR CAPAS
 mapa.events.add('ready', function () {
     
-    // --- Capa para Rutas Guardadas ---
     dataSourceRutas = new atlas.source.DataSource();
     mapa.sources.add(dataSourceRutas);
     mapa.layers.add(new atlas.layer.LineLayer(dataSourceRutas, null, {
@@ -31,7 +31,6 @@ mapa.events.add('ready', function () {
         strokeOpacity: 0.7
     }));
 
-    // --- Capa para Paradas Guardadas ---
     dataSourceParadas = new atlas.source.DataSource();
     mapa.sources.add(dataSourceParadas);
     mapa.layers.add(new atlas.layer.SymbolLayer(dataSourceParadas, null, {
@@ -41,7 +40,6 @@ mapa.events.add('ready', function () {
         }
     }));
 
-    // --- Capa para el Trazado en Vivo ---
     dataSourceTrazado = new atlas.source.DataSource();
     mapa.sources.add(dataSourceTrazado);
     mapa.layers.add(new atlas.layer.LineLayer(dataSourceTrazado, null, {
@@ -50,13 +48,11 @@ mapa.events.add('ready', function () {
         strokeDashArray: [2, 2] 
     }));
 
-    // --- Sistema de Popups ---
     popupGlobal = new atlas.Popup({
         pixelOffset: [0, -18],
         closeButton: false
     });
 
-    // Mostrar Popups al pasar el mouse sobre rutas o paradas
     mapa.events.add('mouseover', [dataSourceRutas, dataSourceParadas], function (e) {
         if (e.shapes && e.shapes.length > 0) {
             let properties = e.shapes[0].getProperties();
@@ -78,19 +74,30 @@ mapa.events.add('ready', function () {
         popupGlobal.close();
     });
 
-    // --- Evento de Clics en el Mapa ---
+    // 🛑 MAGIA APLICADA AQUÍ: Detector de reciclaje de paradas
     mapa.events.add('click', function (evento) {
         if (!esModoTrazado && !esModoParada) return;
 
-        // Azure devuelve la posición como [Lng, Lat]
-        const lng = evento.position[0];
-        const lat = evento.position[1];
+        let lat = evento.position[1];
+        let lng = evento.position[0];
+        
+        let paradaIdExistente = 0;
+        let nombreParadaExistente = "";
+
+        // ¿El usuario le dio clic a un pin que ya existía?
+        if (evento.shapes && evento.shapes.length > 0) {
+            let shapeParada = evento.shapes.find(s => s.getType() === 'Point' && s.getProperties().id_parada);
+            if (shapeParada) {
+                paradaIdExistente = shapeParada.getProperties().id_parada;
+                nombreParadaExistente = shapeParada.getProperties().nombre;
+                // Ajustamos la coordenada EXACTA del pin viejo
+                lng = shapeParada.getCoordinates()[0];
+                lat = shapeParada.getCoordinates()[1];
+            }
+        }
 
         if (esModoTrazado) {
-            // Guardamos para el backend en formato [lat, lng]
             coordenadasTemporales.push([lat, lng]); 
-
-            // Convertimos para pintar en Azure Maps en formato [lng, lat]
             let coordenadasAzure = coordenadasTemporales.map(coord => [coord[1], coord[0]]);
             
             dataSourceTrazado.clear();
@@ -98,28 +105,29 @@ mapa.events.add('ready', function () {
                 dataSourceTrazado.add(new atlas.data.Feature(new atlas.data.LineString(coordenadasAzure)));
             }
         } else if (esModoParada) {
-            guardarParadaFisica(lat, lng);
+            guardarParadaFisica(lat, lng, paradaIdExistente, nombreParadaExistente);
         }
     });
 
-    // Una vez configurado el mapa, pedimos los datos a Go
     cargarRutasDesdeAPI();
     cargarParadasDesdeAPI();
 });
 
-// --- FUNCIONES DE COMUNICACIÓN CON LA API ---
+// Resetear el contador de orden si el usuario cambia de ruta en el selector
+document.getElementById("ruta-parada").addEventListener('change', function() {
+    ordenActualParada = 0; 
+});
+
 function cargarRutasDesdeAPI() {
     apiObtenerRutas()
         .then((rutas) => {
             const selectRutas = document.getElementById("ruta-parada");
-            selectRutas.innerHTML = "";
+            selectRutas.innerHTML = `<option value="">Selecciona una ruta...</option>`; // Opción por defecto
             
             if (dataSourceRutas) dataSourceRutas.clear();
 
             rutas.forEach((ruta) => {
                 let colorRuta = ruta.tipo === "linea" ? "#e6194B" : "#000075";
-                
-                // Convertimos el arreglo que manda Go [lat, lng] a [lng, lat]
                 let coordsAzure = ruta.coordenadas.map(c => [c[1], c[0]]);
                 
                 if (dataSourceRutas && coordsAzure.length > 1) {
@@ -148,7 +156,8 @@ function cargarParadasDesdeAPI() {
             paradas.forEach((p) => {
                 if (dataSourceParadas) {
                     let point = new atlas.data.Feature(new atlas.data.Point([p.longitud, p.latitud]), {
-                        nombre: p.nombre
+                        nombre: p.nombre,
+                        id_parada: p.id // 🛑 Guardamos el ID oculto en el mapa para poder reciclarlo
                     });
                     dataSourceParadas.add(point);
                 }
@@ -157,7 +166,6 @@ function cargarParadasDesdeAPI() {
         .catch((err) => console.error("Error al cargar paradas:", err));
 }
 
-// --- INTERFAZ DE BOTONES (Sin cambios de lógica) ---
 function conmutarModoTrazado() {
     if (esModoParada) conmutarModoParada();
 
@@ -193,6 +201,11 @@ function conmutarModoParada() {
         btn.style.background = "#dc3545";
         estado.innerText = "Modo Parada Activo: Haz clic en el mapa para guardarla";
         estado.style.display = "block";
+        
+        // Si no han seleccionado ruta, avisar
+        if(document.getElementById("ruta-parada").value === "") {
+            alert("⚠️ Selecciona a qué ruta le vas a asignar paradas en el menú de la derecha.");
+        }
     } else {
         btn.innerText = "Modo Colocar Parada";
         btn.style.background = "#28a745";
@@ -200,7 +213,6 @@ function conmutarModoParada() {
     }
 }
 
-// --- GUARDAR DATOS (POST) ---
 function guardarRuta() {
     const nombreInput = document.getElementById("nombre").value.trim();
     const tipoInput = document.getElementById("tipo").value;
@@ -213,7 +225,7 @@ function guardarRuta() {
     const datosRuta = {
         nombre: nombreInput,
         tipo: tipoInput,
-        coordenadas: coordenadasTemporales, // Se envía a Go exactamente como antes [lat, lng]
+        coordenadas: coordenadasTemporales, 
     };
 
     apiGuardarRuta(datosRuta)
@@ -230,31 +242,42 @@ function guardarRuta() {
         });
 }
 
-function guardarParadaFisica(lat, lng) {
-    const nombreInput = document.getElementById("nombre-parada").value.trim();
+// 🛑 NUEVO: Función de guardado inteligente (Nuevas o Recicladas)
+function guardarParadaFisica(lat, lng, paradaIdExistente, nombreParadaExistente) {
+    let nombreInput = document.getElementById("nombre-parada").value.trim();
     const rutaIdInput = document.getElementById("ruta-parada").value;
 
-    if (nombreInput === "") {
-        alert("Escribe el nombre de la parada antes de hacer clic en el mapa.");
+    if (rutaIdInput === "") {
+        alert("Debes seleccionar una ruta en el menú de la derecha primero.");
         return;
     }
-    if (rutaIdInput === "") {
-        alert("Debes crear al menos una ruta primero.");
-        return;
+
+    // Lógica de reciclaje
+    if (paradaIdExistente !== 0) {
+        nombreInput = nombreParadaExistente; // Usamos el nombre que ya tenía en la BD
+        const confirmar = confirm(`¿Quieres vincular la parada ya existente "${nombreInput}" a esta ruta?`);
+        if (!confirmar) return;
+    } else {
+        if (nombreInput === "") {
+            alert("Escribe el nombre de la nueva parada antes de hacer clic en el mapa.");
+            return;
+        }
     }
 
     const datosParada = {
         ruta_id: parseInt(rutaIdInput),
+        parada_id: paradaIdExistente, // Va 0 si es calle vacía, o el ID real si tocaste un pin
         nombre: nombreInput,
         latitud: lat,
         longitud: lng,
+        orden: ordenActualParada // Le decimos a Go el orden de esta parada
     };
 
     apiGuardarParada(datosParada)
         .then((data) => {
-            alert(`¡Parada "${nombreInput}" guardada con éxito!`);
+            alert(`¡Parada "${nombreInput}" vinculada exitosamente! (Orden en la ruta: ${ordenActualParada})`);
             document.getElementById("nombre-parada").value = "";
-            conmutarModoParada();
+            ordenActualParada++; // Sumamos 1 para el siguiente clic
             cargarParadasDesdeAPI();
         })
         .catch((err) => {

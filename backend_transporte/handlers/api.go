@@ -65,39 +65,83 @@ func RutasHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Funcion para agrgar	nuevaParada
+// Funcion para agregar nuevaParada y vincularla
 func ParadasHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
-		var p modelos.Parada
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		// Creamos una estructura temporal para recibir los datos del admin.js
+		var req struct {
+			RutaID   int     `json:"ruta_id"`
+			ParadaID int     `json:"parada_id"` // Vendrá si reutilizamos una parada existente
+			Nombre   string  `json:"nombre"`
+			Latitud  float64 `json:"latitud"`
+			Longitud float64 `json:"longitud"`
+			Orden    int     `json:"orden"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Datos inválidos", http.StatusBadRequest)
 			return
 		}
-		var id int
-		err := bd.Conexion.QueryRow(
-			`INSERT INTO paradas (ruta_id, nombre, latitud, longitud) VALUES ($1, $2, $3, $4) RETURNING id;`,
-			p.RutaID, p.Nombre, p.Latitud, p.Longitud,
-		).Scan(&id)
+
+		// 🛑 INICIA LA TRANSACCIÓN SQL
+		tx, err := bd.Conexion.Begin()
 		if err != nil {
-			http.Error(w, "Error BD: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Error iniciando transacción", http.StatusInternalServerError)
 			return
 		}
+
+		var paradaID int
+
+		// Si ParadaID es 0, significa que es una parada completamente nueva
+		if req.ParadaID == 0 {
+			err = tx.QueryRow(
+				`INSERT INTO paradas (nombre, latitud, longitud) VALUES ($1, $2, $3) RETURNING id;`,
+				req.Nombre, req.Latitud, req.Longitud,
+			).Scan(&paradaID)
+			
+			if err != nil {
+				tx.Rollback() // Si falla, abortamos todo
+				http.Error(w, "Error creando parada en BD: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else {
+			// Si ya trae ID, significa que diste clic en un pin gris existente para reciclarla
+			paradaID = req.ParadaID
+		}
+
+		// Insertamos el puente en la tabla pivote
+		_, err = tx.Exec(
+			`INSERT INTO rutas_paradas (ruta_id, parada_id, orden) VALUES ($1, $2, $3);`,
+			req.RutaID, paradaID, req.Orden,
+		)
+		
+		if err != nil {
+			tx.Rollback() // Si la vinculación falla, la parada nueva tampoco se guarda
+			http.Error(w, "Error vinculando la parada con la ruta: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// 🛑 CONFIRMAMOS LA TRANSACCIÓN
+		tx.Commit()
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `{"mensaje": "Parada guardada", "id": %d}`, id)
+		fmt.Fprintf(w, `{"mensaje": "Parada procesada y vinculada", "id": %d}`, paradaID)
 
 	case http.MethodGet:
-		rows, err := bd.Conexion.Query(`SELECT id, ruta_id, nombre, latitud, longitud FROM paradas;`)
+		// Actualizamos el SELECT quitando el ruta_id
+		rows, err := bd.Conexion.Query(`SELECT id, nombre, latitud, longitud FROM paradas;`)
 		if err != nil {
 			http.Error(w, "Error BD", http.StatusInternalServerError)
 			return
 		}
 		defer rows.Close()
+		
 		lista := []modelos.Parada{}
 		for rows.Next() {
 			var p modelos.Parada
-			rows.Scan(&p.ID, &p.RutaID, &p.Nombre, &p.Latitud, &p.Longitud)
+			// Actualizamos el Scan para que coincida[cite: 2]
+			rows.Scan(&p.ID, &p.Nombre, &p.Latitud, &p.Longitud)
 			lista = append(lista, p)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -114,7 +158,8 @@ func ParadaCercanaHandler(w http.ResponseWriter, r *http.Request) {
 	lat, _ := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
 	lng, _ := strconv.ParseFloat(r.URL.Query().Get("lng"), 64)
 
-	rows, err := bd.Conexion.Query(`SELECT id, ruta_id, nombre, latitud, longitud FROM paradas;`)
+	// Actualizamos el SELECT quitando el ruta_id[cite: 2]
+	rows, err := bd.Conexion.Query(`SELECT id, nombre, latitud, longitud FROM paradas;`)
 	if err != nil {
 		http.Error(w, "Error BD: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -127,7 +172,8 @@ func ParadaCercanaHandler(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var p modelos.Parada
-		rows.Scan(&p.ID, &p.RutaID, &p.Nombre, &p.Latitud, &p.Longitud)
+		// Actualizamos el Scan quitando el &p.RutaID[cite: 2]
+		rows.Scan(&p.ID, &p.Nombre, &p.Latitud, &p.Longitud)
 		dist := utils.Haversine(lat, lng, p.Latitud, p.Longitud)
 		if dist < minDist {
 			minDist = dist
@@ -175,8 +221,10 @@ func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
 			p1.nombre as parada_origen, p2.nombre as parada_destino,
 			p1.latitud, p1.longitud, p2.latitud, p2.longitud
 		FROM rutas r
-		JOIN paradas p1 ON r.id = p1.ruta_id
-		JOIN paradas p2 ON r.id = p2.ruta_id
+		JOIN rutas_paradas rp1 ON r.id = rp1.ruta_id
+		JOIN paradas p1 ON rp1.parada_id = p1.id
+		JOIN rutas_paradas rp2 ON r.id = rp2.ruta_id
+		JOIN paradas p2 ON rp2.parada_id = p2.id
 		WHERE 
 			(6371 * acos(cos(radians($1)) * cos(radians(p1.latitud)) * cos(radians(p1.longitud) - radians($2)) + sin(radians($1)) * sin(radians(p1.latitud)))) < 1.0
 			AND 
