@@ -7,7 +7,7 @@
 
     <!-- 1. SDK de Azure Maps (CSS) -->
     <link href="https://atlas.microsoft.com/sdk/javascript/mapcontrol/3/atlas.min.css" rel="stylesheet" />
-    
+
     <style>
       body {
         margin: 0;
@@ -90,6 +90,27 @@
         font-weight: bold;
         cursor: pointer;
       }
+      /* Indicador GPS del Usuario animado */
+            .marcador-gps-usuario {
+              background-color: #007bff;
+              color: white;
+              padding: 6px 14px;
+              border-radius: 20px;
+              font-weight: bold;
+              border: 2px solid white;
+              box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+              font-family: sans-serif;
+              font-size: 14px;
+              white-space: nowrap;
+              animation: pulse 2s infinite;
+            }
+
+            @keyframes pulse {
+              0% { transform: scale(1); box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+              50% { transform: scale(1.05); box-shadow: 0 6px 10px rgba(0,123,255,0.4); }
+              100% { transform: scale(1); box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+            }
+          </style>
     </style>
   </head>
   <body>
@@ -107,7 +128,7 @@
 
     <!-- 2. SDK de Azure Maps (JS) -->
     <script src="https://atlas.microsoft.com/sdk/javascript/mapcontrol/3/atlas.min.js"></script>
-    
+
     <script src="api.js"></script>
     <script src="usuario.js"></script>
   </body>
