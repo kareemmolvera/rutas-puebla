@@ -25,10 +25,10 @@ async function buscarSugerencias(texto) {
     if (texto.trim().length < 3) return; // Empezar a buscar después de 3 letras
 
     clearTimeout(timeoutBusqueda); // Evitar saturar la API con cada tecla
-    
+
     timeoutBusqueda = setTimeout(async () => {
         const urlSugerencias = `https://atlas.microsoft.com/search/fuzzy/json?api-version=1.0&query=${encodeURIComponent(texto + ", Puebla")}&subscription-key=${AZURE_MAPS_KEY}&limit=5`;
-        
+
         try {
             const respuesta = await fetch(urlSugerencias);
             const datos = await respuesta.json();
@@ -47,7 +47,7 @@ async function buscarSugerencias(texto) {
         } catch (error) {
             console.error("Error cargando sugerencias:", error);
         }
-    }, 300); // Espera 300ms después de que dejas de escribir
+    }, 200); // Espera 300ms después de que dejas de escribir
 }
 
 
@@ -106,9 +106,9 @@ mapa.events.add('ready', function () {
     dsPOIs = new atlas.source.DataSource();
     mapa.sources.add(dsPOIs);
     mapa.layers.add(new atlas.layer.SymbolLayer(dsPOIs, null, {
-        iconOptions: { 
+        iconOptions: {
             image: 'marker-blue', // Un icono más pequeño para no estorbar
-            size: 0.6 
+            size: 0.6
         },
         textOptions: {
             textField: ['get', 'name'], // Muestra el nombre del lugar (ej. "Oxxo")
@@ -117,10 +117,10 @@ mapa.events.add('ready', function () {
             color: '#444444' // Gris oscuro para que no compita con los pines principales
         }
     }));
-    
+
     // Iniciar rastreo GPS tan pronto cargue el mapa
     iniciarRastreoGPS();
-  
+
     //Capa Controles Dentro del mapa
     // --- CONTROLES DE INTERFAZ PREMIUM (Con Tráfico) ---
     mapa.controls.add([
@@ -136,7 +136,7 @@ mapa.events.add('ready', function () {
         })
     ], {
         position: 'bottom-right'
-    }); 
+    });
 });
 
 // --- RASTREO GPS ---
@@ -151,13 +151,13 @@ function iniciarRastreoGPS() {
                 // Actualizar marcador GPS en Azure (Nota: Azure usa Lng, Lat)
                 dsGPS.clear();
                 dsGPS.add(new atlas.data.Feature(new atlas.data.Point([lng, lat])));
-                
+
                 // Centrar la cámara en el usuario solo la primera vez que detecta señal
                 if (primeraVezGPS) {
                     mapa.setCamera({ center: [lng, lat], zoom: 15 });
-                    
+
                     cargarLugaresDeReferencia(lat, lng);
-                    
+
                     primeraVezGPS = false;
                 }
             },
@@ -248,7 +248,7 @@ async function buscarMejorRutaEnGo(latA, lngA, latB, lngB) {
                 new atlas.data.Feature(new atlas.data.Point(puntoOrigen), { title: "🟢 " + data.parada_origen_nombre }),
                 new atlas.data.Feature(new atlas.data.Point(puntoDestino), { title: "🔴 " + data.parada_destino_nombre })
             ]);
-            
+
             // Ajustar automáticamente la cámara para que encuadre toda la ruta
             mapa.setCamera({
                 bounds: atlas.data.BoundingBox.fromData(coordsAzure),
@@ -277,9 +277,9 @@ async function cargarLugaresDeReferencia(lat, lng) {
     try {
         const respuesta = await fetch(urlPOIs);
         const datos = await respuesta.json();
-        
+
         dsPOIs.clear(); // Limpiar para no amontonar iconos si el usuario se mueve
-        
+
         if (datos.results) {
             const lugares = datos.results.map(lugar => {
                 let nombreLugar = lugar.poi ? lugar.poi.name : "Lugar";

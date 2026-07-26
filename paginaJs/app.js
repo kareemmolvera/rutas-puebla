@@ -2,27 +2,27 @@
 
 // 1. INICIALIZAR EL MAPA
 const mapa = new atlas.Map("mapa", {
-    center: [-98.2063, 19.0414], 
+    center: [-98.2063, 19.0414],
     zoom: 14,
     authOptions: {
         authType: 'subscriptionKey',
-        subscriptionKey: '8Q3AVe2gCxB3xk0Ga3U3y1LvqjpTe6Fk9zui4KIfEpv9UWUJvGddJQQJ99CGACYeBjFjleVwAAAgAZMP4FKk' 
+        subscriptionKey: '8Q3AVe2gCxB3xk0Ga3U3y1LvqjpTe6Fk9zui4KIfEpv9UWUJvGddJQQJ99CGACYeBjFjleVwAAAgAZMP4FKk'
     }
 });
 
 let esModoTrazado = false;
-let coordenadasTemporales = []; 
+let coordenadasTemporales = [];
 let esModoParada = false;
 
 // 🛑 NUEVO: Variable para llevar la cuenta del orden de las paradas
-let ordenActualParada = 0; 
+let ordenActualParada = 0;
 
 let dataSourceRutas, dataSourceParadas, dataSourceTrazado;
 let popupGlobal;
 
 // 2. CONFIGURAR CAPAS
 mapa.events.add('ready', function () {
-    
+
     dataSourceRutas = new atlas.source.DataSource();
     mapa.sources.add(dataSourceRutas);
     mapa.layers.add(new atlas.layer.LineLayer(dataSourceRutas, null, {
@@ -45,7 +45,7 @@ mapa.events.add('ready', function () {
     mapa.layers.add(new atlas.layer.LineLayer(dataSourceTrazado, null, {
         strokeColor: "#ff5722",
         strokeWidth: 4,
-        strokeDashArray: [2, 2] 
+        strokeDashArray: [2, 2]
     }));
 
     popupGlobal = new atlas.Popup({
@@ -56,12 +56,12 @@ mapa.events.add('ready', function () {
     mapa.events.add('mouseover', [dataSourceRutas, dataSourceParadas], function (e) {
         if (e.shapes && e.shapes.length > 0) {
             let properties = e.shapes[0].getProperties();
-            let position = mapa.camera.getCameraState().center; 
-            
+            let position = mapa.camera.getCameraState().center;
+
             if(e.shapes[0].getType() === 'Point') {
                 position = e.shapes[0].getCoordinates();
             }
-            
+
             popupGlobal.setOptions({
                 content: `<div style="padding:10px; font-family:sans-serif;"><b>${properties.nombre}</b> ${properties.tipo ? `(${properties.tipo})` : ''}</div>`,
                 position: position
@@ -74,40 +74,42 @@ mapa.events.add('ready', function () {
         popupGlobal.close();
     });
 
-    // 🛑 MAGIA APLICADA AQUÍ: Detector de reciclaje de paradas
-    mapa.events.add('click', function (evento) {
-        if (!esModoTrazado && !esModoParada) return;
+    // --- Evento de Clics en el Mapa con Snap To Road ---
+        mapa.events.add('click', function (evento) {
+            if (!esModoTrazado && !esModoParada) return;
 
-        let lat = evento.position[1];
-        let lng = evento.position[0];
-        
-        let paradaIdExistente = 0;
-        let nombreParadaExistente = "";
+            let lat = evento.position[1];
+            let lng = evento.position[0];
 
-        // ¿El usuario le dio clic a un pin que ya existía?
-        if (evento.shapes && evento.shapes.length > 0) {
-            let shapeParada = evento.shapes.find(s => s.getType() === 'Point' && s.getProperties().id_parada);
-            if (shapeParada) {
-                paradaIdExistente = shapeParada.getProperties().id_parada;
-                nombreParadaExistente = shapeParada.getProperties().nombre;
-                // Ajustamos la coordenada EXACTA del pin viejo
-                lng = shapeParada.getCoordinates()[0];
-                lat = shapeParada.getCoordinates()[1];
+            let paradaIdExistente = 0;
+            let nombreParadaExistente = "";
+
+            // Detector seguro de pines existentes
+            if (evento.shapes && evento.shapes.length > 0) {
+                let shapeParada = evento.shapes.find(s => {
+                    return s.getProperties && s.getProperties().id_parada;
+                });
+                if (shapeParada) {
+                    paradaIdExistente = shapeParada.getProperties().id_parada;
+                    nombreParadaExistente = shapeParada.getProperties().nombre;
+                    lng = shapeParada.getCoordinates()[0];
+                    lat = shapeParada.getCoordinates()[1];
+                }
             }
-        }
 
-        if (esModoTrazado) {
-            coordenadasTemporales.push([lat, lng]); 
-            let coordenadasAzure = coordenadasTemporales.map(coord => [coord[1], coord[0]]);
-            
-            dataSourceTrazado.clear();
-            if (coordenadasAzure.length > 1) {
-                dataSourceTrazado.add(new atlas.data.Feature(new atlas.data.LineString(coordenadasAzure)));
+            if (esModoTrazado) {
+                if (coordenadasTemporales.length === 0) {
+                    coordenadasTemporales.push([lat, lng]);
+                    dataSourceTrazado.clear();
+                    dataSourceTrazado.add(new atlas.data.Feature(new atlas.data.Point([lng, lat])));
+                } else {
+                    const puntoAnterior = coordenadasTemporales[coordenadasTemporales.length - 1];
+                    obtenerRutaPorCalles(puntoAnterior[0], puntoAnterior[1], lat, lng);
+                }
+            } else if (esModoParada) {
+                guardarParadaFisica(lat, lng, paradaIdExistente, nombreParadaExistente);
             }
-        } else if (esModoParada) {
-            guardarParadaFisica(lat, lng, paradaIdExistente, nombreParadaExistente);
-        }
-    });
+        });
 
     cargarRutasDesdeAPI();
     cargarParadasDesdeAPI();
@@ -115,7 +117,7 @@ mapa.events.add('ready', function () {
 
 // Resetear el contador de orden si el usuario cambia de ruta en el selector
 document.getElementById("ruta-parada").addEventListener('change', function() {
-    ordenActualParada = 0; 
+    ordenActualParada = 0;
 });
 
 function cargarRutasDesdeAPI() {
@@ -123,13 +125,13 @@ function cargarRutasDesdeAPI() {
         .then((rutas) => {
             const selectRutas = document.getElementById("ruta-parada");
             selectRutas.innerHTML = `<option value="">Selecciona una ruta...</option>`; // Opción por defecto
-            
+
             if (dataSourceRutas) dataSourceRutas.clear();
 
             rutas.forEach((ruta) => {
                 let colorRuta = ruta.tipo === "linea" ? "#e6194B" : "#000075";
                 let coordsAzure = ruta.coordenadas.map(c => [c[1], c[0]]);
-                
+
                 if (dataSourceRutas && coordsAzure.length > 1) {
                     let feature = new atlas.data.Feature(new atlas.data.LineString(coordsAzure), {
                         nombre: ruta.nombre,
@@ -201,7 +203,7 @@ function conmutarModoParada() {
         btn.style.background = "#dc3545";
         estado.innerText = "Modo Parada Activo: Haz clic en el mapa para guardarla";
         estado.style.display = "block";
-        
+
         // Si no han seleccionado ruta, avisar
         if(document.getElementById("ruta-parada").value === "") {
             alert("⚠️ Selecciona a qué ruta le vas a asignar paradas en el menú de la derecha.");
@@ -225,7 +227,7 @@ function guardarRuta() {
     const datosRuta = {
         nombre: nombreInput,
         tipo: tipoInput,
-        coordenadas: coordenadasTemporales, 
+        coordenadas: coordenadasTemporales,
     };
 
     apiGuardarRuta(datosRuta)
@@ -290,5 +292,37 @@ function limpiarTrazadoActual() {
     coordenadasTemporales = [];
     if (dataSourceTrazado) {
         dataSourceTrazado.clear();
+    }
+}
+//SNAP TO ROAD (Trazos perfectos sobre asfalto)
+async function obtenerRutaPorCalles(latOrigen, lngOrigen, latDestino, lngDestino) {
+    // Usamos tu llave actual de Azure
+    const AZURE_MAPS_KEY = '8Q3AVe2gCxB3xk0Ga3U3y1LvqjpTe6Fk9zui4KIfEpv9UWUJvGddJQQJ99CGACYeBjFjleVwAAAgAZMP4FKk';
+
+    // travelMode=bus asegura que el trazo respete sentidos de calles y avenidas amplias
+    const url = `https://atlas.microsoft.com/route/directions/json?api-version=1.0&query=${latOrigen},${lngOrigen}:${latDestino},${lngDestino}&travelMode=bus&subscription-key=${AZURE_MAPS_KEY}`;
+
+    try {
+        const respuesta = await fetch(url);
+        const datos = await respuesta.json();
+
+        if (datos.routes && datos.routes.length > 0) {
+            const puntosAsfalto = datos.routes[0].legs[0].points;
+
+            // Guardamos todas las micro-curvas en la memoria (omitiendo el punto 0 para no duplicarlo)
+            for (let i = 1; i < puntosAsfalto.length; i++) {
+                coordenadasTemporales.push([puntosAsfalto[i].latitude, puntosAsfalto[i].longitude]);
+            }
+
+            // Redibujamos la línea continua y curveada en el mapa
+            let coordenadasDibujo = coordenadasTemporales.map(c => [c[1], c[0]]);
+            dataSourceTrazado.clear();
+            dataSourceTrazado.add(new atlas.data.Feature(new atlas.data.LineString(coordenadasDibujo)));
+        } else {
+            // Si le diste clic a un cerro sin calles o muy lejos
+            alert("Azure no encontró calles para conectar esos puntos. Intenta hacer clics más cortos.");
+        }
+    } catch (error) {
+        console.error("Error al procesar el Snap to Road:", error);
     }
 }

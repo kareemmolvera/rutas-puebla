@@ -5,7 +5,6 @@
 *.so
 *.dylib
 
-# Tu binario ejecutable (si llegas a usar 'go build')
 main
 
 # Carpetas de sistema operativo
