@@ -90,7 +90,16 @@ mapa.events.add("ready", function () {
 
   // --- Evento de Clics en el Mapa con Snap To Road ---
   mapa.events.add("click", function (evento) {
-    // Detector seguro de pines existentes
+    if (!esModoTrazado && !esModoParada) return;
+
+    // 1. Declaramos lat y lng globales para este clic
+    let lat = evento.position[1];
+    let lng = evento.position[0];
+
+    let paradaIdExistente = 0;
+    let nombreParadaExistente = "";
+
+    // 2. Detector seguro de pines existentes
     if (evento.shapes && evento.shapes.length > 0) {
       let shapeParada = evento.shapes.find(
         (s) => s.getProperties && s.getProperties().id_parada,
@@ -99,10 +108,13 @@ mapa.events.add("ready", function () {
       if (shapeParada) {
         paradaIdExistente = shapeParada.getProperties().id_parada;
         nombreParadaExistente = shapeParada.getProperties().nombre;
+        // Si tocaste un pin viejo, ajustamos lat y lng a las del pin
         lng = shapeParada.getCoordinates()[0];
         lat = shapeParada.getCoordinates()[1];
       }
     }
+
+    // 3. FASE 2: Snap to Road (Trazado)
     if (esModoTrazado) {
       if (coordenadasTemporales.length === 0) {
         coordenadasTemporales.push([lat, lng]);
@@ -115,7 +127,9 @@ mapa.events.add("ready", function () {
           coordenadasTemporales[coordenadasTemporales.length - 1];
         obtenerRutaPorCalles(puntoAnterior[0], puntoAnterior[1], lat, lng);
       }
-    } else if (esModoParada) {
+    }
+    // 4. FASE 1: Guardar Parada
+    else if (esModoParada) {
       guardarParadaFisica(lat, lng, paradaIdExistente, nombreParadaExistente);
     }
   });
