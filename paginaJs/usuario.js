@@ -148,9 +148,23 @@ function iniciarRastreoGPS() {
                 const lng = posicion.coords.longitude;
                 miUbicacionActual = { lat, lng };
 
-                // Actualizar marcador GPS en Azure (Nota: Azure usa Lng, Lat)
-                dsGPS.clear();
-                dsGPS.add(new atlas.data.Feature(new atlas.data.Point([lng, lat])));
+                // Borramos el marcador anterior si el usuario se mueve
+                                if (window.marcadorUsuario) {
+                                    mapa.markers.remove(window.marcadorUsuario);
+                                }
+
+                                // Creamos un contenedor que usa tu nueva clase CSS
+                                const marcadorHtml = document.createElement('div');
+                                marcadorHtml.className = 'marcador-gps-usuario';
+                                marcadorHtml.innerText = '📍 Estás aquí';
+
+                                window.marcadorUsuario = new atlas.HtmlMarker({
+                                    htmlContent: marcadorHtml,
+                                    position: [lng, lat],
+                                    pixelOffset: [0, -20]
+                                });
+
+                                mapa.markers.add(window.marcadorUsuario);
 
                 // Centrar la cámara en el usuario solo la primera vez que detecta señal
                 if (primeraVezGPS) {
@@ -250,10 +264,12 @@ async function buscarMejorRutaEnGo(latA, lngA, latB, lngB) {
             ]);
 
             // Ajustar automáticamente la cámara para que encuadre toda la ruta
-            mapa.setCamera({
-                bounds: atlas.data.BoundingBox.fromData(coordsAzure),
-                padding: 50
-            });
+            // Ajustar automáticamente la cámara para que encuadre toda la ruta
+                        let lineaGeométrica = new atlas.data.LineString(coordsAzure);
+                        mapa.setCamera({
+                            bounds: atlas.data.BoundingBox.fromData(lineaGeométrica),
+                            padding: 50
+                        });
 
             // Actualizar la tarjeta flotante de la interfaz
             document.getElementById("ruta-titulo").innerText = `¡Toma la ${data.nombre_ruta}!`;
