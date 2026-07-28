@@ -153,12 +153,12 @@ function iniciarRastreoGPS() {
                                     mapa.markers.remove(window.marcadorUsuario);
                                 }
 
-                          //Pasamos el HTML como string para que no choque la animación
-                                                                window.marcadorUsuario = new atlas.HtmlMarker({
-                                                                    htmlContent: '<div class="marcador-gps-usuario">📍 Estás aquí</div>',
-                                                                    position: [lng, lat],
-                                                                    pixelOffset: [0, -20]
-                                                                });
+                                // 🛑 Marcador minimalista (Punto Azul centrado)
+                                                window.marcadorUsuario = new atlas.HtmlMarker({
+                                                    htmlContent: '<div class="marcador-gps-usuario"></div>',
+                                                    position: [lng, lat],
+                                                    pixelOffset: [0, 0] // 0,0 para que el centro del círculo sea tu ubicación exacta
+                                                });
 
                                 mapa.markers.add(window.marcadorUsuario);
 
