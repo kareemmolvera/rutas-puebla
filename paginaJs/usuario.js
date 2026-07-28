@@ -153,16 +153,12 @@ function iniciarRastreoGPS() {
                                     mapa.markers.remove(window.marcadorUsuario);
                                 }
 
-                                // Creamos un contenedor que usa tu nueva clase CSS
-                                const marcadorHtml = document.createElement('div');
-                                marcadorHtml.className = 'marcador-gps-usuario';
-                                marcadorHtml.innerText = '📍 Estás aquí';
-
-                                window.marcadorUsuario = new atlas.HtmlMarker({
-                                    htmlContent: marcadorHtml,
-                                    position: [lng, lat],
-                                    pixelOffset: [0, -20]
-                                });
+                          //Pasamos el HTML como string para que no choque la animación
+                                                                window.marcadorUsuario = new atlas.HtmlMarker({
+                                                                    htmlContent: '<div class="marcador-gps-usuario">📍 Estás aquí</div>',
+                                                                    position: [lng, lat],
+                                                                    pixelOffset: [0, -20]
+                                                                });
 
                                 mapa.markers.add(window.marcadorUsuario);
 
@@ -263,11 +259,9 @@ async function buscarMejorRutaEnGo(latA, lngA, latB, lngB) {
                 new atlas.data.Feature(new atlas.data.Point(puntoDestino), { title: "🔴 " + data.parada_destino_nombre })
             ]);
 
-            // Ajustar automáticamente la cámara para que encuadre toda la ruta
-            // Ajustar automáticamente la cámara para que encuadre toda la ruta
-                        let lineaGeométrica = new atlas.data.LineString(coordsAzure);
+            // 🛑 Ajustar automáticamente la cámara (Sin irnos a África)
                         mapa.setCamera({
-                            bounds: atlas.data.BoundingBox.fromData(lineaGeométrica),
+                            bounds: atlas.data.BoundingBox.fromPositions(coordsAzure),
                             padding: 50
                         });
 
