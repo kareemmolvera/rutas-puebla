@@ -1,17 +1,46 @@
 package main
 
 import (
+	"backend-transporte/bd"
+	"backend-transporte/handlers"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-
-	"backend-transporte/bd"
-	"backend-transporte/handlers"
 )
 
+// 1. EL CADENERO DE LA API
+func authAPI(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodOptions {
+			next(w, r)
+			return
+		}
+
+		// Leemos las credenciales desde el entorno seguro del servidor
+		expectedUser := os.Getenv("ADMIN_USER")
+		expectedPass := os.Getenv("ADMIN_PASS")
+
+		// Fallback por si lo corres en tu computadora local sin configurar las variables
+		if expectedUser == "" {
+			expectedUser = "admin"
+		}
+		if expectedPass == "" {
+			expectedPass = "local"
+		}
+
+		user, pass, ok := r.BasicAuth()
+		if !ok || user != expectedUser || pass != expectedPass {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Panel Administrativo"`)
+			http.Error(w, "Acceso denegado a la Base de Datos", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
+}
+
 func main() {
-	// 1. Conexión a Base de Datos (Local o Nube)
+	// Conexión a Base de Datos
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
 		connStr = "user=postgres password=1415 dbname=bdRutaspuebla sslmode=disable"
@@ -19,16 +48,38 @@ func main() {
 	bd.Inicializar(connStr)
 	defer bd.Conexion.Close()
 
-	// 2. Registro de Endpoints de la API
-	http.HandleFunc("/api/rutas", handlers.HabilitarCORS(handlers.RutasHandler))
-	http.HandleFunc("/api/paradas", handlers.HabilitarCORS(handlers.ParadasHandler))
+	// 2. REGISTRO SEGURO: Envolvemos las APIs vulnerables con el cadenero (authAPI)
+	http.HandleFunc("/api/rutas", handlers.HabilitarCORS(authAPI(handlers.RutasHandler)))
+	http.HandleFunc("/api/paradas", handlers.HabilitarCORS(authAPI(handlers.ParadasHandler)))
+
+	// Estas quedan públicas porque son consultas del pasajero
 	http.HandleFunc("/api/paradas/cercana", handlers.HabilitarCORS(handlers.ParadaCercanaHandler))
 	http.HandleFunc("/api/buscar-ruta", handlers.HandlerBuscarRuta)
 
-	// 3. Servir el Frontend (Sube un nivel hacia paginaJs)
-	http.Handle("/", http.FileServer(http.Dir("../paginaJs")))
+	// 3. EL CADENERO DEL NAVEGADOR
+	fs := http.FileServer(http.Dir("../paginaJs"))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/app.js" {
 
-	// 4. Configuración del Puerto (Local o Nube)
+			expectedUser := os.Getenv("ADMIN_USER")
+			expectedPass := os.Getenv("ADMIN_PASS")
+			if expectedUser == "" {
+				expectedUser = "admin"
+			}
+			if expectedPass == "" {
+				expectedPass = "local"
+			}
+
+			user, pass, ok := r.BasicAuth()
+			if !ok || user != expectedUser || pass != expectedPass {
+				w.Header().Set("WWW-Authenticate", `Basic realm="Acceso Restringido"`)
+				http.Error(w, "Acceso exclusivo para el administrador", http.StatusUnauthorized)
+				return
+			}
+		}
+		fs.ServeHTTP(w, r)
+	})
+	// 4. Configuración del Puerto
 	puerto := os.Getenv("PORT")
 	if puerto == "" {
 		puerto = "8080"

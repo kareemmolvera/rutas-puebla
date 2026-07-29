@@ -15,6 +15,7 @@ async function apiGuardarRuta(datosRuta) {
   const res = await fetch(`${API_URL}/rutas`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify(datosRuta),
   });
   return res.json();
@@ -24,6 +25,7 @@ async function apiGuardarParada(datosParada) {
   const res = await fetch(`${API_URL}/paradas`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify(datosParada),
   });
   return res.json();
