@@ -56,6 +56,19 @@ func main() {
 	http.HandleFunc("/api/paradas/cercana", handlers.HabilitarCORS(handlers.ParadaCercanaHandler))
 	http.HandleFunc("/api/buscar-ruta", handlers.HandlerBuscarRuta)
 
+	// === NUEVO: GENERADOR DINÁMICO DE CONFIGURACIÓN ===
+	// Go creará el archivo config.js "al vuelo" leyendo la llave secreta de Render
+	http.HandleFunc("/config.js", func(w http.ResponseWriter, r *http.Request) {
+		llaveAzure := os.Getenv("AZURE_MAPS_KEY")
+		if llaveAzure == "" {
+			// Llave de respaldo por si pruebas el proyecto localmente en tu computadora
+			llaveAzure = "8Q3AVe2gCxB3xk0Ga3U3y1LvqjpTe6Fk9zui4KIfEpv9UWUJvGddJQQJ99CGACYeBjFjleVwAAAgAZMP4FKk"
+		}
+		// Le decimos al navegador que esto es un archivo JavaScript real (Esto arregla el error de MIME type)
+		w.Header().Set("Content-Type", "application/javascript")
+		fmt.Fprintf(w, "const AZURE_MAPS_KEY = '%s';", llaveAzure)
+	})
+
 	// 3. EL CADENERO DEL NAVEGADOR
 	fs := http.FileServer(http.Dir("../paginaJs"))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
