@@ -1,9 +1,6 @@
 // usuario.js - Versión Azure Maps con Autocompletado
 
-const AZURE_MAPS_KEY =
-  "8Q3AVe2gCxB3xk0Ga3U3y1LvqjpTe6Fk9zui4KIfEpv9UWUJvGddJQQJ99CGACYeBjFjleVwAAAgAZMP4FKk"; // <-- Asegúrate de que esté pegada aquí
-
-// 1. Inyectar la barra de búsqueda con DATALIST (Autocompletado nativo)
+// 1. inyectar la barra de búsqueda con DATALIST (Autocompletado nativo)
 document.addEventListener("DOMContentLoaded", () => {
   let panel = document.getElementById("panel-busqueda");
   if (!panel) {

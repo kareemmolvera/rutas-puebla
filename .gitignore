@@ -10,3 +10,7 @@ main
 # Carpetas de sistema operativo
 .DS_Store
 .commandcode
+
+
+# Configuración y Secretos del Frontend (Llaves API)
+paginaJs/config.js

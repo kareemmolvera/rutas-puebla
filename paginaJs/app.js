@@ -7,7 +7,7 @@ const mapa = new atlas.Map("mapa", {
   authOptions: {
     authType: "subscriptionKey",
     subscriptionKey:
-      "8Q3AVe2gCxB3xk0Ga3U3y1LvqjpTe6Fk9zui4KIfEpv9UWUJvGddJQQJ99CGACYeBjFjleVwAAAgAZMP4FKk",
+    AZURE_MAPS_KEY
   },
 });
 
@@ -344,8 +344,6 @@ async function obtenerRutaPorCalles(
   lngDestino,
 ) {
   // Usamos tu llave actual de Azure
-  const AZURE_MAPS_KEY =
-    "8Q3AVe2gCxB3xk0Ga3U3y1LvqjpTe6Fk9zui4KIfEpv9UWUJvGddJQQJ99CGACYeBjFjleVwAAAgAZMP4FKk";
 
   // travelMode=bus asegura que el trazo respete sentidos de calles y avenidas amplias
   const url = `https://atlas.microsoft.com/route/directions/json?api-version=1.0&query=${latOrigen},${lngOrigen}:${latDestino},${lngDestino}&travelMode=bus&subscription-key=${AZURE_MAPS_KEY}`;
