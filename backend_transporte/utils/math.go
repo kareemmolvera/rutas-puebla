@@ -2,7 +2,6 @@ package utils
 
 import "math"
 
-// Funcion de Haversine calcula la distancia en metros entre dos coordenadas geográficas
 func Haversine(lat1, lon1, lat2, lon2 float64) float64 {
 	const radioTierraKm = 6371.0
 
@@ -20,7 +19,6 @@ func Haversine(lat1, lon1, lat2, lon2 float64) float64 {
 	return radioTierraKm * c * 1000
 }
 
-// BuscarIndiceMasCercano encuentra el punto del trazo más cercano a la parada
 func BuscarIndiceMasCercano(camino [][]float64, latParada, lngParada float64) int {
 	mejorIndice := 0
 	distanciaMinima := math.MaxFloat64

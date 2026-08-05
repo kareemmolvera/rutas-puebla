@@ -8,7 +8,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// Variable global exportada para que los handlers la usen
 var Conexion *sql.DB
 
 func Inicializar(connStr string) {
@@ -24,7 +23,6 @@ func Inicializar(connStr string) {
 	fmt.Println("¡Tablas y BD listas!")
 }
 
-// Función con minúscula porque solo se usa dentro de este archivo
 func inicializarTablas() error {
 	queryRutas := `
 	CREATE TABLE IF NOT EXISTS rutas (

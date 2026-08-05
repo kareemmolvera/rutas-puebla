@@ -26,16 +26,13 @@ type Ruta struct {
 	Coordenadas json.RawMessage `json:"coordenadas"`
 }
 
-// 1. Modificamos la Parada (ahora es independiente)
 type Parada struct {
 	ID       int     `json:"id"`
-	// RutaID fue eliminado de aquí
 	Nombre   string  `json:"nombre"`
 	Latitud  float64 `json:"latitud"`
 	Longitud float64 `json:"longitud"`
 }
 
-// 2. NUEVO: Estructura para la tabla pivote
 type RutaParada struct {
 	RutaID   int `json:"ruta_id"`
 	ParadaID int `json:"parada_id"`

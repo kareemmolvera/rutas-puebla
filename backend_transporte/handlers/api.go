@@ -24,7 +24,6 @@ func HabilitarCORS(siguiente http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// Funcion para agregar nuevaRuta
 func RutasHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -65,11 +64,9 @@ func RutasHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Funcion para agregar nuevaParada y vincularla
 func ParadasHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
-		// Creamos una estructura temporal para recibir los datos del admin.js
 		var req struct {
 			RutaID   int     `json:"ruta_id"`
 			ParadaID int     `json:"parada_id"` // Vendrá si reutilizamos una parada existente
@@ -83,7 +80,6 @@ func ParadasHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 🛑 INICIA LA TRANSACCIÓN SQL
 		tx, err := bd.Conexion.Begin()
 		if err != nil {
 			http.Error(w, "Error iniciando transacción", http.StatusInternalServerError)
@@ -92,36 +88,32 @@ func ParadasHandler(w http.ResponseWriter, r *http.Request) {
 
 		var paradaID int
 
-		// Si ParadaID es 0, significa que es una parada completamente nueva
 		if req.ParadaID == 0 {
 			err = tx.QueryRow(
 				`INSERT INTO paradas (nombre, latitud, longitud) VALUES ($1, $2, $3) RETURNING id;`,
 				req.Nombre, req.Latitud, req.Longitud,
 			).Scan(&paradaID)
-			
+
 			if err != nil {
 				tx.Rollback() // Si falla, abortamos todo
 				http.Error(w, "Error creando parada en BD: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
 		} else {
-			// Si ya trae ID, significa que diste clic en un pin gris existente para reciclarla
 			paradaID = req.ParadaID
 		}
 
-		// Insertamos el puente en la tabla pivote
 		_, err = tx.Exec(
 			`INSERT INTO rutas_paradas (ruta_id, parada_id, orden) VALUES ($1, $2, $3);`,
 			req.RutaID, paradaID, req.Orden,
 		)
-		
+
 		if err != nil {
 			tx.Rollback() // Si la vinculación falla, la parada nueva tampoco se guarda
 			http.Error(w, "Error vinculando la parada con la ruta: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// 🛑 CONFIRMAMOS LA TRANSACCIÓN
 		tx.Commit()
 
 		w.Header().Set("Content-Type", "application/json")
@@ -136,7 +128,7 @@ func ParadasHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer rows.Close()
-		
+
 		lista := []modelos.Parada{}
 		for rows.Next() {
 			var p modelos.Parada
@@ -149,7 +141,6 @@ func ParadasHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Funciones Derivadas
 func ParadaCercanaHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
@@ -158,7 +149,6 @@ func ParadaCercanaHandler(w http.ResponseWriter, r *http.Request) {
 	lat, _ := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
 	lng, _ := strconv.ParseFloat(r.URL.Query().Get("lng"), 64)
 
-	// Actualizamos el SELECT quitando el ruta_id[cite: 2]
 	rows, err := bd.Conexion.Query(`SELECT id, nombre, latitud, longitud FROM paradas;`)
 	if err != nil {
 		http.Error(w, "Error BD: "+err.Error(), http.StatusInternalServerError)
@@ -172,7 +162,6 @@ func ParadaCercanaHandler(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var p modelos.Parada
-		// Actualizamos el Scan quitando el &p.RutaID[cite: 2]
 		rows.Scan(&p.ID, &p.Nombre, &p.Latitud, &p.Longitud)
 		dist := utils.Haversine(lat, lng, p.Latitud, p.Longitud)
 		if dist < minDist {
@@ -195,7 +184,6 @@ func ParadaCercanaHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// Funcion para buscarRuta
 func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -216,7 +204,7 @@ func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-		SELECT 
+		SELECT
 			r.id, r.nombre, r.coordenadas as camino,
 			p1.nombre as parada_origen, p2.nombre as parada_destino,
 			p1.latitud, p1.longitud, p2.latitud, p2.longitud
@@ -225,9 +213,9 @@ func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
 		JOIN paradas p1 ON rp1.parada_id = p1.id
 		JOIN rutas_paradas rp2 ON r.id = rp2.ruta_id
 		JOIN paradas p2 ON rp2.parada_id = p2.id
-		WHERE 
+		WHERE
 			(6371 * acos(cos(radians($1)) * cos(radians(p1.latitud)) * cos(radians(p1.longitud) - radians($2)) + sin(radians($1)) * sin(radians(p1.latitud)))) < 1.0
-			AND 
+			AND
 			(6371 * acos(cos(radians($3)) * cos(radians(p2.latitud)) * cos(radians(p2.longitud) - radians($4)) + sin(radians($3)) * sin(radians(p2.latitud)))) < 1.0
 		ORDER BY (
 			(6371 * acos(cos(radians($1)) * cos(radians(p1.latitud)) * cos(radians(p1.longitud) - radians($2)) + sin(radians($1)) * sin(radians(p1.latitud)))) +
@@ -256,8 +244,7 @@ func HandlerBuscarRuta(w http.ResponseWriter, r *http.Request) {
 	if len(caminoCompleto) > 0 {
 		idxInicio := utils.BuscarIndiceMasCercano(caminoCompleto, latO, lngO)
 		idxFin := utils.BuscarIndiceMasCercano(caminoCompleto, latD, lngD)
-		
-		// 🛑 LA MAGIA: El filtro de direccionalidad 🛑
+
 		if idxInicio >= idxFin {
 			// El camión ya pasó por el destino antes de llegar al usuario. Va en sentido contrario.
 			json.NewEncoder(w).Encode(map[string]string{

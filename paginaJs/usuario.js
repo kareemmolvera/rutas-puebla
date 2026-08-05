@@ -1,6 +1,4 @@
-// usuario.js - Versión Azure Maps con Autocompletado
 
-// 1. inyectar la barra de búsqueda con DATALIST (Autocompletado nativo)
 document.addEventListener("DOMContentLoaded", () => {
   let panel = document.getElementById("panel-busqueda");
   if (!panel) {
@@ -15,7 +13,6 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
 });
 
-// NUEVA FUNCIÓN: Autocompletado mientras escribes
 let timeoutBusqueda;
 async function buscarSugerencias(texto) {
   if (texto.trim().length < 3) return; // Empezar a buscar después de 3 letras
@@ -34,7 +31,6 @@ async function buscarSugerencias(texto) {
       if (datos.results) {
         datos.results.forEach((resultado) => {
           const option = document.createElement("option");
-          // Si es un lugar de interés (POI) usa su nombre, si no, usa la calle
           let nombreLugar = resultado.poi
             ? resultado.poi.name
             : resultado.address.freeformAddress;
@@ -48,7 +44,6 @@ async function buscarSugerencias(texto) {
   }, 200); // Espera 300ms después de que dejas de escribir
 }
 
-// 2. Inicializar mapa de Azure
 const mapa = new atlas.Map("mapa-usuario", {
   center: [-98.2063, 19.0414], // [Longitud, Latitud]
   zoom: 14,
@@ -58,13 +53,11 @@ const mapa = new atlas.Map("mapa-usuario", {
   },
 });
 
-// Variables globales para fuentes de datos
 let dsGPS, dsDestino, dsRuta, dsParadas, dsPOIs;
 let miUbicacionActual = null;
 let primeraVezGPS = true;
 
 mapa.events.add("ready", function () {
-  // Capa 1: Ubicación en vivo del usuario
   dsGPS = new atlas.source.DataSource();
   mapa.sources.add(dsGPS);
   mapa.layers.add(
@@ -73,7 +66,6 @@ mapa.events.add("ready", function () {
     }),
   );
 
-  // Capa 2: Punto de destino buscado
   dsDestino = new atlas.source.DataSource();
   mapa.sources.add(dsDestino);
   mapa.layers.add(
@@ -82,7 +74,6 @@ mapa.events.add("ready", function () {
     }),
   );
 
-  // Capa 3: Línea de la ruta del camión
   dsRuta = new atlas.source.DataSource();
   mapa.sources.add(dsRuta);
   mapa.layers.add(
@@ -92,7 +83,6 @@ mapa.events.add("ready", function () {
     }),
   );
 
-  // Capa 4: Puntos de Subida y Bajada recomendados
   dsParadas = new atlas.source.DataSource();
   mapa.sources.add(dsParadas);
   mapa.layers.add(
@@ -107,7 +97,6 @@ mapa.events.add("ready", function () {
     }),
   );
 
-  // Capa 5: Puntos de referencia (Tiendas, parques, etc.)
   dsPOIs = new atlas.source.DataSource();
   mapa.sources.add(dsPOIs);
   mapa.layers.add(
@@ -125,11 +114,8 @@ mapa.events.add("ready", function () {
     }),
   );
 
-  // Iniciar rastreo GPS tan pronto cargue el mapa
   iniciarRastreoGPS();
 
-  //Capa Controles Dentro del mapa
-  // --- CONTROLES DE INTERFAZ PREMIUM (Con Tráfico) ---
   mapa.controls.add(
     [
       new atlas.control.ZoomControl(),
@@ -143,7 +129,6 @@ mapa.events.add("ready", function () {
           "night",
         ],
       }),
-      // ¡Este es el nuevo botón mágico!
       new atlas.control.TrafficControl({
         incidents: true, // Activa los iconos de choques y obras
       }),
@@ -163,12 +148,10 @@ function iniciarRastreoGPS() {
         const lng = posicion.coords.longitude;
         miUbicacionActual = { lat, lng };
 
-        // Borramos el marcador anterior si el usuario se mueve
         if (window.marcadorUsuario) {
           mapa.markers.remove(window.marcadorUsuario);
         }
 
-        // 🛑 Marcador minimalista (Punto Azul centrado)
         window.marcadorUsuario = new atlas.HtmlMarker({
           htmlContent: '<div class="marcador-gps-usuario"></div>',
           position: [lng, lat],
@@ -177,7 +160,6 @@ function iniciarRastreoGPS() {
 
         mapa.markers.add(window.marcadorUsuario);
 
-        // Centrar la cámara en el usuario solo la primera vez que detecta señal
         if (primeraVezGPS) {
           mapa.setCamera({ center: [lng, lat], zoom: 15 });
 
@@ -196,7 +178,6 @@ function iniciarRastreoGPS() {
   }
 }
 
-// --- BUSCADOR CON LA IA DE AZURE MAPS ---
 async function buscarDestino() {
   const inputDestino = document.getElementById("destino").value;
 
@@ -208,7 +189,6 @@ async function buscarDestino() {
   const boton = document.querySelector("#panel-busqueda button");
   boton.innerText = "...";
 
-  // Usamos search/fuzzy/json en lugar de search/address/json
   const urlBusqueda = `https://atlas.microsoft.com/search/fuzzy/json?api-version=1.0&query=${encodeURIComponent(inputDestino + ", Puebla, Mexico")}&subscription-key=${AZURE_MAPS_KEY}&limit=1`;
 
   try {
@@ -216,18 +196,15 @@ async function buscarDestino() {
     const datos = await respuesta.json();
 
     if (datos.results && datos.results.length > 0) {
-      // Azure devuelve las posiciones dentro de .position
       const latDestino = datos.results[0].position.lat;
       const lngDestino = datos.results[0].position.lon;
 
-      // Dibujar el pin de destino
       dsDestino.clear();
       dsDestino.add(
         new atlas.data.Feature(new atlas.data.Point([lngDestino, latDestino])),
       );
 
       if (miUbicacionActual) {
-        // Llamamos a Go para que haga la magia matemática
         buscarMejorRutaEnGo(
           miUbicacionActual.lat,
           miUbicacionActual.lng,
@@ -258,17 +235,14 @@ async function buscarMejorRutaEnGo(latA, lngA, latB, lngB) {
     } else {
       const coordenadasCamino = JSON.parse(data.camino);
 
-      // Limpiar trazos previos
       dsRuta.clear();
       dsParadas.clear();
 
-      // Dibujar la ruta recomendada (Convertir [lat, lng] de Go a [lng, lat] de Azure)
       let coordsAzure = coordenadasCamino.map((c) => [c[1], c[0]]);
       dsRuta.add(
         new atlas.data.Feature(new atlas.data.LineString(coordsAzure)),
       );
 
-      // Extraer el primer y último punto para colocar los pines de Subida y Bajada
       const puntoOrigen = coordsAzure[0];
       const puntoDestino = coordsAzure[coordsAzure.length - 1];
 
@@ -281,13 +255,11 @@ async function buscarMejorRutaEnGo(latA, lngA, latB, lngB) {
         }),
       ]);
 
-      // 🛑 Ajustar automáticamente la cámara (Sin irnos a África)
       mapa.setCamera({
         bounds: atlas.data.BoundingBox.fromPositions(coordsAzure),
         padding: 50,
       });
 
-      // Actualizar la tarjeta flotante de la interfaz
       document.getElementById("ruta-titulo").innerText =
         `¡Toma la ${data.nombre_ruta}!`;
       document.getElementById("ruta-subida").innerText =
@@ -301,15 +273,12 @@ async function buscarMejorRutaEnGo(latA, lngA, latB, lngB) {
     alert("Error de conexión con el servidor de rutas.");
   }
 }
-// --- CARGAR PUNTOS DE REFERENCIA CERCANOS ---
 async function cargarLugaresDeReferencia(lat, lng) {
-  // 1. Separamos los términos para que la IA no se confunda
   const categorias = ["Oxxo", "Farmacia", "Plaza"];
 
   try {
     dsPOIs.clear(); // Limpiamos pines anteriores
 
-    // 2. Lanzamos las peticiones al mismo tiempo (Promesas Paralelas)
     const peticiones = categorias.map((categoria) => {
       const urlPOIs = `https://atlas.microsoft.com/search/fuzzy/json?api-version=1.0&query=${encodeURIComponent(categoria)}&lat=${lat}&lon=${lng}&radius=1500&limit=4&subscription-key=${AZURE_MAPS_KEY}`;
       return fetch(urlPOIs).then((r) => r.json());
@@ -317,7 +286,6 @@ async function cargarLugaresDeReferencia(lat, lng) {
 
     const respuestas = await Promise.all(peticiones);
 
-    // 3. Juntamos los resultados y los dibujamos
     respuestas.forEach((datos) => {
       if (datos.results) {
         const lugares = datos.results.map((lugar) => {

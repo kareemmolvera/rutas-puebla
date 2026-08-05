@@ -1,4 +1,3 @@
-// app.js - Versión Azure Maps con Muchos a Muchos
 
 // 1. INICIALIZAR EL MAPA
 const mapa = new atlas.Map("mapa", {
@@ -15,13 +14,12 @@ let esModoTrazado = false;
 let coordenadasTemporales = [];
 let esModoParada = false;
 
-// 🛑 NUEVO: Variable para llevar la cuenta del orden de las paradas
 let ordenActualParada = 0;
 
 let dataSourceRutas, dataSourceParadas, dataSourceTrazado;
 let popupGlobal;
 
-// 2. CONFIGURAR CAPAS
+//Capas del Mapa 
 mapa.events.add("ready", function () {
   dataSourceRutas = new atlas.source.DataSource();
   mapa.sources.add(dataSourceRutas);
@@ -88,18 +86,15 @@ mapa.events.add("ready", function () {
     },
   );
 
-  // --- Evento de Clics en el Mapa con Snap To Road ---
   mapa.events.add("click", function (evento) {
     if (!esModoTrazado && !esModoParada) return;
 
-    // 1. Declaramos lat y lng globales para este clic
     let lat = evento.position[1];
     let lng = evento.position[0];
 
     let paradaIdExistente = 0;
     let nombreParadaExistente = "";
 
-    // 2. Detector seguro de pines existentes
     if (evento.shapes && evento.shapes.length > 0) {
       let shapeParada = evento.shapes.find(
         (s) => s.getProperties && s.getProperties().id_parada,
@@ -108,13 +103,11 @@ mapa.events.add("ready", function () {
       if (shapeParada) {
         paradaIdExistente = shapeParada.getProperties().id_parada;
         nombreParadaExistente = shapeParada.getProperties().nombre;
-        // Si tocaste un pin viejo, ajustamos lat y lng a las del pin
         lng = shapeParada.getCoordinates()[0];
         lat = shapeParada.getCoordinates()[1];
       }
     }
 
-    // 3. FASE 2: Snap to Road (Trazado)
     if (esModoTrazado) {
       if (coordenadasTemporales.length === 0) {
         coordenadasTemporales.push([lat, lng]);
@@ -128,7 +121,6 @@ mapa.events.add("ready", function () {
         obtenerRutaPorCalles(puntoAnterior[0], puntoAnterior[1], lat, lng);
       }
     }
-    // 4. FASE 1: Guardar Parada
     else if (esModoParada) {
       guardarParadaFisica(lat, lng, paradaIdExistente, nombreParadaExistente);
     }
@@ -138,7 +130,6 @@ mapa.events.add("ready", function () {
   cargarParadasDesdeAPI();
 });
 
-// Resetear el contador de orden si el usuario cambia de ruta en el selector
 document.getElementById("ruta-parada").addEventListener("change", function () {
   ordenActualParada = 0;
 });
@@ -187,7 +178,7 @@ function cargarParadasDesdeAPI() {
             new atlas.data.Point([p.longitud, p.latitud]),
             {
               nombre: p.nombre,
-              id_parada: p.id, // 🛑 Guardamos el ID oculto en el mapa para poder reciclarlo
+              id_parada: p.id, 
             },
           );
           dataSourceParadas.add(point);
@@ -275,7 +266,7 @@ function guardarRuta() {
     });
 }
 
-// 🛑 NUEVO: Función de guardado inteligente (Nuevas o Recicladas)
+//  Función de guardado inteligente (Nuevas o Recicladas)
 function guardarParadaFisica(
   lat,
   lng,
@@ -336,16 +327,13 @@ function limpiarTrazadoActual() {
     dataSourceTrazado.clear();
   }
 }
-//SNAP TO ROAD (Trazos perfectos sobre asfalto)
 async function obtenerRutaPorCalles(
   latOrigen,
   lngOrigen,
   latDestino,
   lngDestino,
 ) {
-  // Usamos tu llave actual de Azure
 
-  // travelMode=bus asegura que el trazo respete sentidos de calles y avenidas amplias
   const url = `https://atlas.microsoft.com/route/directions/json?api-version=1.0&query=${latOrigen},${lngOrigen}:${latDestino},${lngDestino}&travelMode=bus&subscription-key=${AZURE_MAPS_KEY}`;
 
   try {
@@ -355,7 +343,6 @@ async function obtenerRutaPorCalles(
     if (datos.routes && datos.routes.length > 0) {
       const puntosAsfalto = datos.routes[0].legs[0].points;
 
-      // Guardamos todas las micro-curvas en la memoria (omitiendo el punto 0 para no duplicarlo)
       for (let i = 1; i < puntosAsfalto.length; i++) {
         coordenadasTemporales.push([
           puntosAsfalto[i].latitude,
@@ -363,7 +350,6 @@ async function obtenerRutaPorCalles(
         ]);
       }
 
-      // Redibujamos la línea continua y curveada en el mapa
       let coordenadasDibujo = coordenadasTemporales.map((c) => [c[1], c[0]]);
       dataSourceTrazado.clear();
       dataSourceTrazado.add(
