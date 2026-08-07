@@ -1,4 +1,3 @@
-
 document.addEventListener("DOMContentLoaded", () => {
   let panel = document.getElementById("panel-busqueda");
   if (!panel) {
@@ -6,43 +5,75 @@ document.addEventListener("DOMContentLoaded", () => {
     panel.id = "panel-busqueda";
     document.body.appendChild(panel);
   }
+  // Cambiamos el datalist por un ul para poder darle estilo
   panel.innerHTML = `
-        <input type="text" id="destino" list="sugerencias-azure" placeholder="¿A dónde vas? (Ej. Zócalo, BUAP)" oninput="buscarSugerencias(this.value)">
-        <datalist id="sugerencias-azure"></datalist>
-        <button onclick="buscarDestino()">Ir</button>
+        <div id="contenedor-sugerencias">
+          <input type="text" id="destino" autocomplete="off" placeholder="¿A dónde vas? (Ej. Zócalo, BUAP)">
+          <ul id="lista-resultados"></ul>
+        </div>
+        <button id="btn-ir" onclick="buscarDestino()">Ir</button>
     `;
+
+  // Event Listener para el Debounce
+  const inputDestino = document.getElementById("destino");
+  inputDestino.addEventListener('input', function(e) {
+      buscarSugerencias(e.target.value);
+  });
 });
 
 let timeoutBusqueda;
 async function buscarSugerencias(texto) {
-  if (texto.trim().length < 3) return; // Empezar a buscar después de 3 letras
+  const datalist = document.getElementById("lista-resultados");
 
-  clearTimeout(timeoutBusqueda); // Evitar saturar la API con cada tecla
+  if (texto.trim().length < 3) {
+      datalist.style.display = "none";
+      return;
+  }
+
+  clearTimeout(timeoutBusqueda); // El famoso Debounce
 
   timeoutBusqueda = setTimeout(async () => {
-    const urlSugerencias = `https://atlas.microsoft.com/search/fuzzy/json?api-version=1.0&query=${encodeURIComponent(texto + ", Puebla")}&subscription-key=${AZURE_MAPS_KEY}&limit=5`;
+    // Parámetros de Geofencing para Puebla
+    const latPuebla = 19.0414;
+    const lonPuebla = -98.2063;
+    const radio = 15000;
+
+    const urlSugerencias = `https://atlas.microsoft.com/search/fuzzy/json?api-version=1.0&query=${encodeURIComponent(texto)}&subscription-key=${AZURE_MAPS_KEY}&lat=${latPuebla}&lon=${lonPuebla}&radius=${radio}&countrySet=MX&limit=5`;
 
     try {
       const respuesta = await fetch(urlSugerencias);
       const datos = await respuesta.json();
-      const datalist = document.getElementById("sugerencias-azure");
-      datalist.innerHTML = ""; // Limpiar sugerencias anteriores
 
-      if (datos.results) {
+      datalist.innerHTML = ""; // Limpiar lista
+
+      if (datos.results && datos.results.length > 0) {
         datos.results.forEach((resultado) => {
-          const option = document.createElement("option");
-          let nombreLugar = resultado.poi
-            ? resultado.poi.name
-            : resultado.address.freeformAddress;
-          option.value = nombreLugar;
-          datalist.appendChild(option);
+          const li = document.createElement("li");
+          li.className = "item-resultado";
+
+          let nombreLugar = resultado.poi ? resultado.poi.name : resultado.address.freeformAddress;
+          li.textContent = nombreLugar;
+
+          // Qué hacer cuando el usuario toca la sugerencia
+          li.onclick = () => {
+              document.getElementById("destino").value = nombreLugar;
+              datalist.style.display = "none"; // Ocultar lista
+              buscarDestino(); //
+          };
+
+          datalist.appendChild(li);
         });
+        datalist.style.display = "block"; // Mostrar lista
+      } else {
+          datalist.style.display = "none";
       }
     } catch (error) {
       console.error("Error cargando sugerencias:", error);
     }
-  }, 200); // Espera 300ms después de que dejas de escribir
+  }, 400); // Espera 400ms
 }
+
+
 
 const mapa = new atlas.Map("mapa-usuario", {
   center: [-98.2063, 19.0414], // [Longitud, Latitud]
@@ -274,13 +305,23 @@ async function buscarMejorRutaEnGo(latA, lngA, latB, lngB) {
   }
 }
 async function cargarLugaresDeReferencia(lat, lng) {
-  const categorias = ["Oxxo", "Farmacia", "Plaza"];
+  const categorias = [
+    "Mercado",
+    "Hospital",
+    "Universidad",
+    "Parque",
+    "Centro Comercial",
+    "Monumento",
+    "Banco",
+    "Oxxo",
+    "Farmacia"
+  ];
 
   try {
     dsPOIs.clear(); // Limpiamos pines anteriores
 
     const peticiones = categorias.map((categoria) => {
-      const urlPOIs = `https://atlas.microsoft.com/search/fuzzy/json?api-version=1.0&query=${encodeURIComponent(categoria)}&lat=${lat}&lon=${lng}&radius=1500&limit=4&subscription-key=${AZURE_MAPS_KEY}`;
+      const urlPOIs = `https://atlas.microsoft.com/search/fuzzy/json?api-version=1.0&query=${encodeURIComponent(categoria)}&lat=${lat}&lon=${lng}&radius=2500&limit=12&subscription-key=${AZURE_MAPS_KEY}`;
       return fetch(urlPOIs).then((r) => r.json());
     });
 
@@ -295,10 +336,10 @@ async function cargarLugaresDeReferencia(lat, lng) {
             { name: nombreLugar },
           );
         });
-        dsPOIs.add(lugares);
+        dsPOIs.add(lugares); // Agregamos los lugares al mapa
       }
     });
   } catch (error) {
-    console.error("Error cargando lugares de referencia:", error);
+    console.error("Error cargando lugares de referencia:", error);[cite: 2]
   }
 }

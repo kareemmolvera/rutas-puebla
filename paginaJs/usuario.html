@@ -71,6 +71,35 @@
         width: 85%;
         max-width: 350px;
         display: none; /* Oculta por defecto */
+
+        #contenedor-sugerencias {
+        position: relative;
+            width: 100%;
+        }
+              #lista-resultados {
+                list-style-type: none;
+                margin: 5px 0 0 0;
+                padding: 0;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+                max-height: 250px;
+                overflow-y: auto;
+                position: absolute;
+                width: 100%;
+                top: 100%;
+                left: 0;
+                display: none; /* Oculta por defecto */
+              }
+              .item-resultado {
+                padding: 12px;
+                border-bottom: 1px solid #eee;
+                cursor: pointer;
+                font-size: 14px;
+                text-align: left;
+              }
+              .item-resultado:hover {
+                background-color: #f5f5f5;
       }
       #tarjeta-ruta h3 {
         margin: 0 0 10px 0;
