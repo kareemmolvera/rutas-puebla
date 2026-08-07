@@ -16,8 +16,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Event Listener para el Debounce
   const inputDestino = document.getElementById("destino");
-  inputDestino.addEventListener('input', function(e) {
-      buscarSugerencias(e.target.value);
+  inputDestino.addEventListener("input", function (e) {
+    buscarSugerencias(e.target.value);
   });
 });
 
@@ -26,8 +26,8 @@ async function buscarSugerencias(texto) {
   const datalist = document.getElementById("lista-resultados");
 
   if (texto.trim().length < 3) {
-      datalist.style.display = "none";
-      return;
+    datalist.style.display = "none";
+    return;
   }
 
   clearTimeout(timeoutBusqueda); // El famoso Debounce
@@ -51,29 +51,29 @@ async function buscarSugerencias(texto) {
           const li = document.createElement("li");
           li.className = "item-resultado";
 
-          let nombreLugar = resultado.poi ? resultado.poi.name : resultado.address.freeformAddress;
+          let nombreLugar = resultado.poi
+            ? resultado.poi.name
+            : resultado.address.freeformAddress;
           li.textContent = nombreLugar;
 
           // Qué hacer cuando el usuario toca la sugerencia
           li.onclick = () => {
-              document.getElementById("destino").value = nombreLugar;
-              datalist.style.display = "none"; // Ocultar lista
-              buscarDestino(); //
+            document.getElementById("destino").value = nombreLugar;
+            datalist.style.display = "none"; // Ocultar lista
+            buscarDestino(); //
           };
 
           datalist.appendChild(li);
         });
         datalist.style.display = "block"; // Mostrar lista
       } else {
-          datalist.style.display = "none";
+        datalist.style.display = "none";
       }
     } catch (error) {
       console.error("Error cargando sugerencias:", error);
     }
   }, 400); // Espera 400ms
 }
-
-
 
 const mapa = new atlas.Map("mapa-usuario", {
   center: [-98.2063, 19.0414], // [Longitud, Latitud]
@@ -314,7 +314,7 @@ async function cargarLugaresDeReferencia(lat, lng) {
     "Monumento",
     "Banco",
     "Oxxo",
-    "Farmacia"
+    "Farmacia",
   ];
 
   try {
@@ -340,6 +340,6 @@ async function cargarLugaresDeReferencia(lat, lng) {
       }
     });
   } catch (error) {
-    console.error("Error cargando lugares de referencia:", error);[cite: 2]
+    console.error("Error cargando lugares de referencia:", error);
   }
 }
